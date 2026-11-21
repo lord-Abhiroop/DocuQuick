@@ -82,7 +82,8 @@ class MainActivity : AppCompatActivity() {
                 R.id.chipPdf -> recentAdapter.filterByType(DocumentType.PDF)
                 R.id.chipWord -> recentAdapter.filterByType(DocumentType.WORD)
                 R.id.chipExcel -> recentAdapter.filterByType(DocumentType.EXCEL)
-                R.id.chipText -> recentAdapter.filterByType(DocumentType.MARKDOWN)
+                R.id.chipPpt -> recentAdapter.filterByType(DocumentType.PPT)
+                R.id.chipText -> recentAdapter.filterByTypes(listOf(DocumentType.TEXT, DocumentType.MARKDOWN))
                 R.id.chipBooks -> recentAdapter.filterByType(DocumentType.EPUB)
                 R.id.chipCode -> recentAdapter.filterByType(DocumentType.CODE)
                 else -> recentAdapter.filterByType(null)
@@ -100,6 +101,8 @@ class MainActivity : AppCompatActivity() {
                     "application/msword",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     "application/vnd.ms-excel",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    "application/vnd.ms-powerpoint",
                     "text/csv",
                     "text/plain",
                     "text/markdown",
@@ -115,21 +118,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openViewer(uri: Uri) {
-        // Persist permissions if content URI
         try {
-            contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        } catch (e: Exception) {
-            // Ignore if not supported by provider
-        }
+            if (uri.scheme == "content") {
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e: Exception) {
+                    // Ignore if not supported by provider
+                }
+            }
 
-        val intent = Intent(this, ViewerActivity::class.java).apply {
-            data = uri
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val intent = Intent(this, ViewerActivity::class.java).apply {
+                data = uri
+                if (uri.scheme == "content") {
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "Unable to open document: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
         }
-        startActivity(intent)
     }
 
     private fun forwardToViewer(incoming: Intent) {
@@ -140,9 +150,16 @@ class MainActivity : AppCompatActivity() {
             if (incoming.hasExtra(Intent.EXTRA_STREAM)) {
                 putExtra(Intent.EXTRA_STREAM, incoming.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
             }
+            if (incoming.clipData != null) {
+                clipData = incoming.clipData
+            }
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(viewerIntent)
+        try {
+            startActivity(viewerIntent)
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "Error forwarding document: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+        }
         finish()
     }
 }

@@ -19,6 +19,7 @@
     <string name="tab_pdf">PDF</string>
     <string name="tab_word">Word</string>
     <string name="tab_excel">Excel</string>
+    <string name="tab_ppt">PPT</string>
     <string name="tab_text">Text/MD</string>
     <string name="tab_books">EPUB</string>
     <string name="tab_code">Code</string>

@@ -1,5 +1,6 @@
 package com.docuquick.app
 
+import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -15,6 +16,12 @@ import android.text.TextWatcher
 import android.text.style.BackgroundColorSpan
 import android.view.Gravity
 import android.view.View
+import android.webkit.JavascriptInterface
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.TableRow
 import android.widget.TextView
 import android.widget.Toast
@@ -23,6 +30,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.webkit.WebViewAssetLoader
 import com.docuquick.app.databinding.ActivityViewerBinding
 import com.docuquick.app.model.DocumentType
 import com.docuquick.app.model.RecentFile
@@ -31,6 +39,7 @@ import com.docuquick.app.parser.DocxParser
 import com.docuquick.app.parser.EpubParser
 import com.docuquick.app.parser.ExcelParser
 import com.docuquick.app.parser.MarkdownParser
+import com.docuquick.app.parser.PptxParser
 import com.docuquick.app.parser.SheetData
 import com.docuquick.app.ui.PdfAdapter
 import com.docuquick.app.util.FileUtils
@@ -38,9 +47,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.zip.ZipInputStream
 
 class ViewerActivity : AppCompatActivity() {
 
@@ -74,6 +85,7 @@ class ViewerActivity : AppCompatActivity() {
         setupToolbar()
         setupSearchPanel()
         setupActionButtons()
+        setupPinchToZoom()
 
         documentUri?.let { uri ->
             loadDocument(uri)
@@ -83,18 +95,33 @@ class ViewerActivity : AppCompatActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        resolveIncomingIntent()
+        documentUri?.let { uri ->
+            setupToolbar()
+            loadDocument(uri)
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         closePdfRenderer()
     }
 
     private fun resolveIncomingIntent() {
-        val uri: Uri? = when (intent?.action) {
-            Intent.ACTION_SEND -> {
-                intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+        var uri: Uri? = null
+
+        if (intent != null) {
+            if (intent.action == Intent.ACTION_SEND) {
+                uri = intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
             }
-            else -> {
-                intent?.data
+            if (uri == null) {
+                uri = intent.data
+            }
+            if (uri == null && intent.clipData != null && intent.clipData!!.itemCount > 0) {
+                uri = intent.clipData!!.getItemAt(0).uri
             }
         }
 
@@ -103,17 +130,168 @@ class ViewerActivity : AppCompatActivity() {
             val (name, size) = FileUtils.getFileMetadata(this, uri)
             documentName = name
             documentSizeBytes = size
-            documentType = DocumentType.fromFileNameAndMime(name, contentResolver.getType(uri))
 
-            // Record in Recents
+            // Cache incoming content URIs locally to private storage
+            // This ensures documents in Recents remain permanently accessible across reboots with zero crashes
+            var effectiveUri = uri
+            if (uri.scheme == "content") {
+                effectiveUri = FileUtils.cacheDocumentLocally(this, uri, name)
+                documentUri = effectiveUri
+            }
+
+            val mime = try { contentResolver.getType(uri) } catch (e: Exception) { null }
+            var type = DocumentType.fromFileNameAndMime(name, mime)
+
+            // If unknown (common when WhatsApp sends generic content without extension), inspect stream magic bytes
+            if (type == DocumentType.UNKNOWN) {
+                try {
+                    contentResolver.openInputStream(effectiveUri)?.use { stream ->
+                        type = DocumentType.detectFromStream(stream)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            documentType = type
+
+            // Record cached permanent URI in Recents
             app.prefs.addRecentFile(
                 RecentFile(
-                    uriString = uri.toString(),
+                    uriString = effectiveUri.toString(),
                     name = name,
-                    sizeBytes = size,
-                    type = documentType
+                    sizeBytes = if (documentSizeBytes > 0) documentSizeBytes else size,
+                    type = documentType,
+                    lastOpened = System.currentTimeMillis()
                 )
             )
+        }
+    }
+
+    private val assetLoader by lazy {
+        WebViewAssetLoader.Builder()
+            .setDomain("appassets.androidplatform.net")
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .addPathHandler("/doc/", object : WebViewAssetLoader.PathHandler {
+                override fun handle(path: String): WebResourceResponse? {
+                    val uri = documentUri ?: return null
+                    return try {
+                        val stream = contentResolver.openInputStream(uri) ?: return null
+                        val mime = when {
+                            path.endsWith(".pptx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            path.endsWith(".docx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            path.endsWith(".xlsx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            else -> contentResolver.getType(uri) ?: "application/octet-stream"
+                        }
+                        val headers = mapOf(
+                            "Access-Control-Allow-Origin" to "*",
+                            "Access-Control-Allow-Methods" to "GET, OPTIONS",
+                            "Access-Control-Allow-Headers" to "*"
+                        )
+                        WebResourceResponse(mime, null, 200, "OK", headers, stream)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        null
+                    }
+                }
+            })
+            .build()
+    }
+
+    inner class PresentationBridge {
+        @JavascriptInterface
+        fun onSlideVisible(current: Int, total: Int) {
+            runOnUiThread {
+                binding.statusPillCard.visibility = View.VISIBLE
+                binding.txtStatusPill.text = "Slide $current of $total"
+            }
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        binding.epubWebView.apply {
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                allowFileAccess = true
+                builtInZoomControls = true
+                displayZoomControls = false
+                useWideViewPort = true
+                loadWithOverviewMode = true
+                setSupportZoom(true)
+            }
+            removeJavascriptInterface("DocuQuickBridge")
+            addJavascriptInterface(PresentationBridge(), "DocuQuickBridge")
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView,
+                    request: WebResourceRequest
+                ): WebResourceResponse? {
+                    return assetLoader.shouldInterceptRequest(request.url)
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    binding.loadingLayout.visibility = View.GONE
+
+                    val trackingJs = """
+                        (function() {
+                            if (window._dqTrackingInstalled) return;
+                            window._dqTrackingInstalled = true;
+                            function checkSlide() {
+                                var slides = document.querySelectorAll('#result .slide');
+                                if (!slides || slides.length === 0) return;
+                                var mid = window.innerHeight * 0.4;
+                                for (var i = 0; i < slides.length; i++) {
+                                    var r = slides[i].getBoundingClientRect();
+                                    if (r.top <= mid && r.bottom >= mid) {
+                                        if (window.DocuQuickBridge) window.DocuQuickBridge.onSlideVisible(i + 1, slides.length);
+                                        return;
+                                    }
+                                }
+                                if (slides.length > 0 && window.DocuQuickBridge) {
+                                    window.DocuQuickBridge.onSlideVisible(1, slides.length);
+                                }
+                            }
+                            window.addEventListener('scroll', checkSlide, { passive: true });
+                            var observer = new MutationObserver(checkSlide);
+                            var res = document.getElementById('result');
+                            if (res) observer.observe(res, { childList: true, subtree: true });
+                            setTimeout(checkSlide, 600);
+                            setTimeout(checkSlide, 1500);
+                        })();
+                    """.trimIndent()
+                    view?.evaluateJavascript(trackingJs, null)
+                }
+
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    error: WebResourceError?
+                ) {
+                    super.onReceivedError(view, request, error)
+                    if (request?.isForMainFrame == true) {
+                        showGenericError(error?.description?.toString() ?: "Failed to render document.")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setupPinchToZoom() {
+        // Universal pinch-in / pinch-out zoom indicator and reset
+        binding.contentContainer.setOnZoomChangeListener { scale ->
+            if (scale > 1.05f) {
+                binding.zoomPillCard.visibility = View.VISIBLE
+                binding.txtZoomPill.text = "${(scale * 100).toInt()}% ⤢ Reset"
+            } else {
+                binding.zoomPillCard.visibility = View.GONE
+            }
+        }
+
+        binding.zoomPillCard.setOnClickListener {
+            binding.contentContainer.resetZoom()
         }
     }
 
@@ -163,27 +341,33 @@ class ViewerActivity : AppCompatActivity() {
         binding.loadingLayout.visibility = View.VISIBLE
         hideAllContentViews()
 
+        if (documentType == DocumentType.UNSUPPORTED) {
+            showUnsupportedError()
+            return
+        }
+
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 when (documentType) {
                     DocumentType.PDF -> loadPdfDocument(uri)
                     DocumentType.WORD -> loadWordDocument(uri)
                     DocumentType.EXCEL -> loadSpreadsheetDocument(uri)
+                    DocumentType.PPT -> loadPresentationDocument(uri)
                     DocumentType.MARKDOWN -> loadMarkdownDocument(uri)
                     DocumentType.TEXT -> loadTextDocument(uri)
                     DocumentType.CODE -> loadCodeDocument(uri)
                     DocumentType.EPUB -> loadEpubDocument(uri)
                     DocumentType.IMAGE -> loadImageDocument(uri)
                     DocumentType.UNKNOWN -> loadFallbackDocument(uri)
+                    DocumentType.UNSUPPORTED -> {
+                        withContext(Dispatchers.Main) {
+                            showUnsupportedError()
+                        }
+                    }
                 }
-            } catch (e: Exception) {
+            } catch (t: Throwable) {
                 withContext(Dispatchers.Main) {
-                    binding.loadingLayout.visibility = View.GONE
-                    Toast.makeText(
-                        this@ViewerActivity,
-                        getString(R.string.error_opening_file, e.localizedMessage ?: "Unknown error"),
-                        Toast.LENGTH_LONG
-                    ).show()
+                    showGenericError(t.localizedMessage ?: "File could not be parsed as a readable document.")
                 }
             }
         }
@@ -195,6 +379,71 @@ class ViewerActivity : AppCompatActivity() {
         binding.tableHorizontalScrollView.visibility = View.GONE
         binding.epubWebView.visibility = View.GONE
         binding.docImageView.visibility = View.GONE
+        binding.errorStateLayout.visibility = View.GONE
+    }
+
+    private fun showUnsupportedError() {
+        binding.loadingLayout.visibility = View.GONE
+        hideAllContentViews()
+        binding.errorStateLayout.visibility = View.VISIBLE
+        binding.statusPillCard.visibility = View.GONE
+        binding.zoomPillCard.visibility = View.GONE
+
+        val extension = documentName.substringAfterLast('.', "").uppercase().ifEmpty { "UNKNOWN" }
+        val mime = documentUri?.let { contentResolver.getType(it) } ?: ""
+
+        val isVideo = mime.startsWith("video/") || extension in listOf("MP4", "MKV", "AVI", "MOV", "WEBM", "3GP")
+        val isAudio = mime.startsWith("audio/") || extension in listOf("MP3", "WAV", "AAC", "M4A", "FLAC", "OGG")
+
+        val mediaType = when {
+            isVideo -> "Video"
+            isAudio -> "Audio"
+            else -> "Media/Binary"
+        }
+
+        binding.txtErrorTitle.text = "Unsupported $mediaType File"
+        binding.txtErrorMessage.text = "DocuQuick is optimized for reading documents (PDF, Word, Excel, Markdown, Text, EPUB, Code, and Images).\n\n\"$documentName\" is a $mediaType file ($extension) and cannot be displayed as a document."
+
+        binding.btnErrorGoBack.setOnClickListener {
+            finish()
+        }
+
+        binding.btnErrorOpenWith.setOnClickListener {
+            openInOtherApp()
+        }
+    }
+
+    private fun showGenericError(message: String) {
+        binding.loadingLayout.visibility = View.GONE
+        hideAllContentViews()
+        binding.errorStateLayout.visibility = View.VISIBLE
+        binding.statusPillCard.visibility = View.GONE
+        binding.zoomPillCard.visibility = View.GONE
+
+        binding.txtErrorTitle.text = "Cannot Preview Document"
+        binding.txtErrorMessage.text = "DocuQuick could not open \"$documentName\":\n\n$message"
+
+        binding.btnErrorGoBack.setOnClickListener {
+            finish()
+        }
+
+        binding.btnErrorOpenWith.setOnClickListener {
+            openInOtherApp()
+        }
+    }
+
+    private fun openInOtherApp() {
+        documentUri?.let { uri ->
+            try {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, contentResolver.getType(uri) ?: "*/*")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(intent, "Open with..."))
+            } catch (e: Exception) {
+                Toast.makeText(this, "No external app found to open this file", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     // =========================================================================
@@ -234,12 +483,26 @@ class ViewerActivity : AppCompatActivity() {
     // 2. Microsoft Word (DOCX) Loader
     // =========================================================================
     private suspend fun loadWordDocument(uri: Uri) {
-        val ssb = contentResolver.openInputStream(uri)?.use { stream ->
-            DocxParser.parseDocx(stream)
-        } ?: SpannableStringBuilder("Unable to read Word document.")
+        val extension = documentName.substringAfterLast('.', "").lowercase()
+        if (extension == "docx") {
+            withContext(Dispatchers.Main) {
+                binding.loadingLayout.visibility = View.VISIBLE
+                binding.epubWebView.visibility = View.VISIBLE
+                binding.statusPillCard.visibility = View.VISIBLE
+                binding.txtStatusPill.text = "Word Document"
+                setupWebView()
+                val encodedName = URLEncoder.encode(documentName, "UTF-8")
+                val url = "https://appassets.androidplatform.net/assets/viewer/docx.html?name=$encodedName&ext=docx"
+                binding.epubWebView.loadUrl(url)
+            }
+        } else {
+            val ssb = contentResolver.openInputStream(uri)?.use { stream ->
+                DocxParser.parseDocx(stream)
+            } ?: SpannableStringBuilder("Unable to read Word document.")
 
-        withContext(Dispatchers.Main) {
-            displayTextContent(ssb, "Word Document")
+            withContext(Dispatchers.Main) {
+                displayTextContent(ssb, "Word Document")
+            }
         }
     }
 
@@ -261,6 +524,61 @@ class ViewerActivity : AppCompatActivity() {
             binding.tableHorizontalScrollView.visibility = View.VISIBLE
             populateTableView(sheetData)
             binding.txtStatusPill.text = getString(R.string.sheet_rows, sheetData.rows.size, sheetData.headers.size)
+        }
+    }
+
+    // =========================================================================
+    // 4. PowerPoint Presentation (PPTX, PPT) Loader
+    // =========================================================================
+    private suspend fun loadPresentationDocument(uri: Uri) {
+        val extension = documentName.substringAfterLast('.', "").lowercase()
+        val isPptx = (extension == "pptx" || extension == "ppsx" || extension.isEmpty())
+
+        // Count slides quickly from zip entries in background IO
+        val slideCount = withContext(Dispatchers.IO) {
+            try {
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    var count = 0
+                    ZipInputStream(stream).use { zis ->
+                        var entry = zis.nextEntry
+                        while (entry != null) {
+                            if (entry.name.startsWith("ppt/slides/slide") && entry.name.endsWith(".xml")) {
+                                count++
+                            }
+                            entry = zis.nextEntry
+                        }
+                    }
+                    count
+                } ?: 0
+            } catch (e: Exception) {
+                0
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            binding.loadingLayout.visibility = View.VISIBLE
+            binding.epubWebView.visibility = View.VISIBLE
+            binding.statusPillCard.visibility = View.VISIBLE
+            binding.txtStatusPill.text = if (slideCount > 0) "$slideCount Slides • Presentation" else "Presentation"
+
+            setupWebView()
+
+            if (isPptx) {
+                val encodedName = URLEncoder.encode(documentName, "UTF-8")
+                val url = "https://appassets.androidplatform.net/assets/viewer/pptx.html?name=$encodedName&ext=pptx"
+                binding.epubWebView.loadUrl(url)
+            } else {
+                // Fallback for legacy binary .ppt files
+                val isDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                        android.content.res.Configuration.UI_MODE_NIGHT_YES
+                val (html, _) = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        PptxParser.parseToHtml(stream, false, isDark)
+                    } ?: Pair("<html><body>Unable to read presentation.</body></html>", 0)
+                }
+                binding.loadingLayout.visibility = View.GONE
+                binding.epubWebView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+            }
         }
     }
 
@@ -589,6 +907,12 @@ class ViewerActivity : AppCompatActivity() {
             
             Opened:
             $dateStr
+
+            ───────────────────────
+            App Creator:
+            Abhiroop Ghosh
+
+            “Life eventually gets better when obstacles become the only correct path”
         """.trimIndent()
 
         dialog.show()

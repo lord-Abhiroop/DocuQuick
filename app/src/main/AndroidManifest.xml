@@ -26,15 +26,17 @@
             </intent-filter>
         </activity>
 
-        <!-- Document Viewer Activity: Instant-launch Intent Target -->
+        <!-- Document Viewer Activity: Instant-launch Intent Target with Highest Priority -->
         <activity
             android:name=".ViewerActivity"
             android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:label="@string/title_activity_viewer"
             android:parentActivityName=".MainActivity">
 
             <!-- 1. Handle PDF Documents -->
-            <intent-filter tools:ignore="AppLinkUrlError">
+            <intent-filter android:priority="999999" tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -44,7 +46,7 @@
             </intent-filter>
 
             <!-- 2. Handle Microsoft Word (.docx, .doc) -->
-            <intent-filter tools:ignore="AppLinkUrlError">
+            <intent-filter android:priority="999999" tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -55,7 +57,7 @@
             </intent-filter>
 
             <!-- 3. Handle Spreadsheets (.xlsx, .xls, .csv, .tsv) -->
-            <intent-filter tools:ignore="AppLinkUrlError">
+            <intent-filter android:priority="999999" tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -68,8 +70,20 @@
                 <data android:mimeType="text/tab-separated-values" />
             </intent-filter>
 
-            <!-- 4. Handle Text & Markdown -->
-            <intent-filter tools:ignore="AppLinkUrlError">
+            <!-- 4. Handle PowerPoint Presentations (.pptx, .ppt) -->
+            <intent-filter android:priority="999999" tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <data android:mimeType="application/vnd.ms-powerpoint" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.slideshow" />
+            </intent-filter>
+
+            <!-- 5. Handle Text & Markdown -->
+            <intent-filter android:priority="999999" tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -78,10 +92,11 @@
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="text/markdown" />
                 <data android:mimeType="text/x-markdown" />
+                <data android:mimeType="text/*" />
             </intent-filter>
 
             <!-- 5. Handle EPUB E-Books -->
-            <intent-filter tools:ignore="AppLinkUrlError">
+            <intent-filter android:priority="999999" tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -91,7 +106,7 @@
             </intent-filter>
 
             <!-- 6. Handle Code, Data, JSON, XML, Web -->
-            <intent-filter tools:ignore="AppLinkUrlError">
+            <intent-filter android:priority="999999" tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -108,7 +123,7 @@
             </intent-filter>
 
             <!-- 7. Handle Images -->
-            <intent-filter tools:ignore="AppLinkUrlError">
+            <intent-filter android:priority="999999" tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -117,8 +132,55 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
 
-            <!-- 8. Handle "Send / Share to" Intents from WhatsApp, Telegram, Gmail -->
-            <intent-filter>
+            <!-- 8. Handle WhatsApp & Other Apps Binary Streams / Octet-Stream -->
+            <intent-filter android:priority="999999" tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+
+            <!-- 9. Handle File Extensions by Path Pattern (Direct Tap from any file manager / messenger) -->
+            <intent-filter android:priority="999999" tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.pdf" />
+                <data android:pathPattern=".*\\.docx" />
+                <data android:pathPattern=".*\\.doc" />
+                <data android:pathPattern=".*\\.xlsx" />
+                <data android:pathPattern=".*\\.xls" />
+                <data android:pathPattern=".*\\.pptx" />
+                <data android:pathPattern=".*\\.ppt" />
+                <data android:pathPattern=".*\\.pps" />
+                <data android:pathPattern=".*\\.ppsx" />
+                <data android:pathPattern=".*\\.csv" />
+                <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.md" />
+                <data android:pathPattern=".*\\.epub" />
+                <data android:pathPattern=".*\\.json" />
+                <data android:pathPattern=".*\\.xml" />
+                <data android:pathPattern=".*\\.py" />
+                <data android:pathPattern=".*\\.html" />
+            </intent-filter>
+
+            <!-- 10. Universal Fallback Intent Filter -->
+            <intent-filter android:priority="999998" tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+
+            <!-- 11. Handle "Send / Share to" Intents from WhatsApp, Telegram, Gmail -->
+            <intent-filter android:priority="999999">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />

@@ -52,13 +52,15 @@ class PreferencesManager(context: Context) {
                 } catch (e: Exception) {
                     DocumentType.UNKNOWN
                 }
+                val savedTime = obj.optLong("time", 0L)
+                val finalTime = if (savedTime > 0L) savedTime else System.currentTimeMillis()
                 list.add(
                     RecentFile(
                         uriString = obj.getString("uri"),
                         name = obj.getString("name"),
                         sizeBytes = obj.optLong("size", 0L),
                         type = type,
-                        lastOpened = obj.optLong("time", 0L)
+                        lastOpened = finalTime
                     )
                 )
             }

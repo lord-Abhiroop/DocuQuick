@@ -18,7 +18,7 @@ class RecentFilesAdapter(
 
     private var allFiles: List<RecentFile> = emptyList()
     private var filteredFiles: List<RecentFile> = emptyList()
-    private var currentFilter: DocumentType? = null
+    private var currentFilterTypes: List<DocumentType>? = null
 
     fun setFiles(files: List<RecentFile>) {
         allFiles = files
@@ -26,15 +26,21 @@ class RecentFilesAdapter(
     }
 
     fun filterByType(type: DocumentType?) {
-        currentFilter = type
+        currentFilterTypes = if (type == null) null else listOf(type)
+        applyFilter()
+    }
+
+    fun filterByTypes(types: List<DocumentType>?) {
+        currentFilterTypes = types
         applyFilter()
     }
 
     private fun applyFilter() {
-        filteredFiles = if (currentFilter == null) {
+        val filters = currentFilterTypes
+        filteredFiles = if (filters == null || filters.isEmpty()) {
             allFiles
         } else {
-            allFiles.filter { it.type == currentFilter }
+            allFiles.filter { it.type in filters }
         }
         notifyDataSetChanged()
     }

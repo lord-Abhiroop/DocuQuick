@@ -45,16 +45,17 @@ object ExcelParser {
             var currentStr = StringBuilder()
 
             while (eventType != XmlPullParser.END_DOCUMENT) {
+                val tag = (parser.name ?: "").substringAfter(':')
                 when (eventType) {
                     XmlPullParser.START_TAG -> {
-                        if (parser.name == "t") inText = true
+                        if (tag == "t") inText = true
                     }
                     XmlPullParser.TEXT -> {
                         if (inText) currentStr.append(parser.text)
                     }
                     XmlPullParser.END_TAG -> {
-                        if (parser.name == "t") inText = false
-                        else if (parser.name == "si") {
+                        if (tag == "t") inText = false
+                        else if (tag == "si") {
                             sharedStrings.add(currentStr.toString())
                             currentStr.clear()
                         }
@@ -74,9 +75,10 @@ object ExcelParser {
             var cellValue = ""
 
             while (eventType != XmlPullParser.END_DOCUMENT) {
+                val tag = (parser.name ?: "").substringAfter(':')
                 when (eventType) {
                     XmlPullParser.START_TAG -> {
-                        when (parser.name) {
+                        when (tag) {
                             "row" -> currentRow.clear()
                             "c" -> {
                                 val type = parser.getAttributeValue(null, "t")
@@ -89,7 +91,7 @@ object ExcelParser {
                         }
                     }
                     XmlPullParser.END_TAG -> {
-                        when (parser.name) {
+                        when (tag) {
                             "c" -> {
                                 val resolved = if (isStringRef) {
                                     val idx = cellValue.toIntOrNull() ?: -1

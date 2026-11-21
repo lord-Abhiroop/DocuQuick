@@ -72,6 +72,50 @@ object FileUtils {
         } ?: ""
     }
 
+    fun cacheDocumentLocally(context: Context, uri: Uri, originalName: String): Uri {
+        return try {
+            val docsDir = File(context.filesDir, "documents")
+            if (!docsDir.exists()) docsDir.mkdirs()
+
+            val safeName = originalName.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifEmpty { "document" }
+            val targetFile = File(docsDir, safeName)
+
+            val fileProviderUri = try {
+                androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    targetFile
+                )
+            } catch (e: Exception) {
+                null
+            }
+
+            // If already cached and valid, return it directly
+            if (uri == fileProviderUri || (uri.scheme == "file" && uri.path == targetFile.absolutePath && targetFile.exists())) {
+                return fileProviderUri ?: uri
+            }
+
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(targetFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            if (targetFile.exists() && targetFile.length() > 0) {
+                fileProviderUri ?: androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    targetFile
+                )
+            } else {
+                uri
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            uri
+        }
+    }
+
     fun formatLastOpened(timeMs: Long): String {
         return DateUtils.getRelativeTimeSpanString(
             timeMs,

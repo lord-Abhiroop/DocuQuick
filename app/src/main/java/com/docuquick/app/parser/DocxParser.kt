@@ -20,18 +20,22 @@ object DocxParser {
      */
     fun parseDocx(inputStream: InputStream): SpannableStringBuilder {
         val ssb = SpannableStringBuilder()
-        val zip = ZipInputStream(inputStream)
-        var entry = zip.nextEntry
+        try {
+            val zip = ZipInputStream(inputStream)
+            var entry = zip.nextEntry
 
-        while (entry != null) {
-            if (entry.name == "word/document.xml") {
-                parseDocumentXml(zip, ssb)
-                break
+            while (entry != null) {
+                if (entry.name == "word/document.xml") {
+                    parseDocumentXml(zip, ssb)
+                    break
+                }
+                entry = zip.nextEntry
             }
-            entry = zip.nextEntry
+            zip.close()
+        } catch (e: Exception) {
+            return SpannableStringBuilder("Unable to parse Word document: ${e.localizedMessage}")
         }
 
-        zip.close()
         return if (ssb.isNotEmpty()) ssb else SpannableStringBuilder("Document is empty.")
     }
 
@@ -47,42 +51,41 @@ object DocxParser {
         var isItalic = false
         var isUnderline = false
         var isStrike = false
-        var runTextBuilder = StringBuilder()
         var runStart = 0
 
         while (eventType != XmlPullParser.END_DOCUMENT) {
-            val name = parser.name
+            val name = (parser.name ?: "").substringAfter(':')
 
             when (eventType) {
                 XmlPullParser.START_TAG -> {
                     when (name) {
-                        "w:p" -> {
+                        "p" -> {
                             inParagraph = true
                             isHeading = false
                             headingLevel = 1
                         }
-                        "w:pStyle" -> {
-                            val styleVal = parser.getAttributeValue(null, "w:val") ?: ""
+                        "pStyle" -> {
+                            val styleVal = parser.getAttributeValue(null, "val")
+                                ?: parser.getAttributeValue(null, "w:val") ?: ""
                             if (styleVal.contains("Heading", ignoreCase = true) || styleVal.contains("Title", ignoreCase = true)) {
                                 isHeading = true
                                 headingLevel = styleVal.filter { it.isDigit() }.toIntOrNull() ?: 1
                             }
                         }
-                        "w:r" -> {
+                        "r" -> {
                             isBold = false
                             isItalic = false
                             isUnderline = false
                             isStrike = false
-                            runTextBuilder.clear()
                             runStart = ssb.length
                         }
-                        "w:b" -> isBold = true
-                        "w:i" -> isItalic = true
-                        "w:u" -> isUnderline = true
-                        "w:strike" -> isStrike = true
-                        "w:t" -> {
+                        "b" -> isBold = true
+                        "i" -> isItalic = true
+                        "u" -> isUnderline = true
+                        "strike" -> isStrike = true
+                        "t" -> {
                             val text = parser.nextText()
-                            if (text.isNotEmpty()) {
+                            if (!text.isNullOrEmpty()) {
                                 ssb.append(text)
                                 val end = ssb.length
 
@@ -100,16 +103,16 @@ object DocxParser {
                                 }
                             }
                         }
-                        "w:tab" -> ssb.append("    ")
-                        "w:br" -> ssb.append("\n")
-                        "w:tbl" -> ssb.append("\n[Table]\n")
-                        "w:tr" -> { /* row */ }
-                        "w:tc" -> { /* cell separator */ }
+                        "tab" -> ssb.append("    ")
+                        "br" -> ssb.append("\n")
+                        "tbl" -> ssb.append("\n")
+                        "tr" -> { /* row start */ }
+                        "tc" -> { /* cell start */ }
                     }
                 }
                 XmlPullParser.END_TAG -> {
                     when (name) {
-                        "w:p" -> {
+                        "p" -> {
                             if (isHeading) {
                                 val scale = when (headingLevel) {
                                     1 -> 1.45f
@@ -123,12 +126,11 @@ object DocxParser {
                                     ssb.setSpan(RelativeSizeSpan(scale), pStart, ssb.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                                 }
                             }
-                            // Clean paragraph spacing
                             ssb.append("\n\n")
                             inParagraph = false
                         }
-                        "w:tc" -> ssb.append("  |  ")
-                        "w:tr" -> ssb.append("\n")
+                        "tc" -> ssb.append("  │  ")
+                        "tr" -> ssb.append("\n")
                     }
                 }
             }

@@ -90,6 +90,13 @@
                     android:text="@string/tab_excel" />
 
                 <com.google.android.material.chip.Chip
+                    android:id="@+id/chipPpt"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/tab_ppt" />
+
+                <com.google.android.material.chip.Chip
                     android:id="@+id/chipText"
                     style="@style/Widget.Material3.Chip.Filter"
                     android:layout_width="wrap_content"
@@ -132,7 +139,7 @@
             android:layout_height="match_parent"
             android:clipToPadding="false"
             android:paddingTop="8dp"
-            android:paddingBottom="96dp"
+            android:paddingBottom="148dp"
             tools:listitem="@layout/item_recent_file" />
 
         <!-- Empty State Container -->
@@ -168,13 +175,58 @@
 
     </FrameLayout>
 
-    <!-- Floating Action Button to Open Document -->
+    <!-- Creator Signature & Quote Footer Banner (Unobstructed full width) -->
+    <LinearLayout
+        android:id="@+id/creatorQuoteLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="10dp"
+        android:background="?attr/colorSurface"
+        android:elevation="2dp">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginBottom="6dp"
+            android:background="?attr/colorSurfaceVariant"
+            android:alpha="0.3" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="“Life eventually gets better when obstacles become the only correct path”"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="11.5sp"
+            android:textStyle="italic"
+            android:lineSpacingExtra="2dp"
+            android:gravity="start"
+            android:alpha="0.95" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="— Abhiroop Ghosh"
+            android:textColor="@color/accent_cyan"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:gravity="start" />
+    </LinearLayout>
+
+    <!-- Floating Action Button to Open Document (Elevated safely above the quote banner) -->
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fabOpenDocument"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="20dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="76dp"
         android:text="@string/action_open_file"
         app:icon="@drawable/ic_folder_open"
         app:iconTint="@android:color/white"
