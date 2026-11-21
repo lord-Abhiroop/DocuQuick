@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand Primary Colors -->
+    <color name="primary">#0F172A</color>
+    <color name="primary_variant">#1E293B</color>
+    <color name="accent_cyan">#0284C7</color>
+    <color name="accent_teal">#0D9488</color>
+    <color name="accent_indigo">#6366F1</color>
+    
+    <!-- Document Type Accent Badges -->
+    <color name="badge_pdf">#EF4444</color>
+    <color name="badge_word">#2563EB</color>
+    <color name="badge_excel">#16A34A</color>
+    <color name="badge_markdown">#8B5CF6</color>
+    <color name="badge_code">#D97706</color>
+    <color name="badge_epub">#EC4899</color>
+    <color name="badge_image">#06B6D4</color>
+    
+    <!-- Backgrounds & Surfaces (Light) -->
+    <color name="background_light">#F8FAFC</color>
+    <color name="surface_light">#FFFFFF</color>
+    <color name="surface_variant_light">#F1F5F9</color>
+    <color name="border_light">#E2E8F0</color>
+    <color name="text_primary_light">#0F172A</color>
+    <color name="text_secondary_light">#64748B</color>
+    
+    <!-- Backgrounds & Surfaces (Dark / AMOLED) -->
+    <color name="background_dark">#050811</color>
+    <color name="surface_dark">#0B1220</color>
+    <color name="surface_variant_dark">#121C30</color>
+    <color name="border_dark">#1E293B</color>
+    <color name="text_primary_dark">#F1F5F9</color>
+    <color name="text_secondary_dark">#94A3B8</color>
+    
+    <!-- Reading Tints -->
+    <color name="sepia_bg">#FBF0D9</color>
+    <color name="sepia_text">#5F4B32</color>
+    <color name="highlight_match">#FEF08A</color>
+    <color name="code_bg">#0D1117</color>
+</resources>

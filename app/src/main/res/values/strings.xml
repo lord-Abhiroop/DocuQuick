@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DocuQuick</string>
+    <string name="app_tagline">Ultra-Fast Document Viewer</string>
+    <string name="title_activity_viewer">Document Viewer</string>
+    
+    <!-- Actions -->
+    <string name="action_open_file">Open Document</string>
+    <string name="action_search">Search in document</string>
+    <string name="action_search_hint">Find text...</string>
+    <string name="action_theme_toggle">Toggle Theme</string>
+    <string name="action_text_size">Text Size</string>
+    <string name="action_share">Share</string>
+    <string name="action_info">File Details</string>
+    <string name="action_clear_recents">Clear History</string>
+    
+    <!-- Filter Tabs -->
+    <string name="tab_all">All</string>
+    <string name="tab_pdf">PDF</string>
+    <string name="tab_word">Word</string>
+    <string name="tab_excel">Excel</string>
+    <string name="tab_text">Text/MD</string>
+    <string name="tab_books">EPUB</string>
+    <string name="tab_code">Code</string>
+    
+    <!-- Status & Info -->
+    <string name="recent_documents">Recent Documents</string>
+    <string name="no_recent_files">No recent documents opened yet.\nTap below to open any file instantly!</string>
+    <string name="loading_document">Opening document...</string>
+    <string name="error_opening_file">Could not open document: %1$s</string>
+    <string name="page_counter">Page %1$d of %2$d</string>
+    <string name="word_count">%1$d words • %2$s read</string>
+    <string name="sheet_rows">%1$d rows • %2$d columns</string>
+    <string name="search_matches">%1$d of %2$d</string>
+    <string name="no_matches">No matches found</string>
+</resources>
