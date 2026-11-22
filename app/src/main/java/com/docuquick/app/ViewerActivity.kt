@@ -108,6 +108,13 @@ class ViewerActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         closePdfRenderer()
+        try {
+            binding.epubWebView.clearCache(true)
+            binding.epubWebView.destroy()
+            FileUtils.pruneCache(this)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun resolveIncomingIntent() {
@@ -131,12 +138,27 @@ class ViewerActivity : AppCompatActivity() {
             documentName = name
             documentSizeBytes = size
 
-            // Cache incoming content URIs locally to private storage
-            // This ensures documents in Recents remain permanently accessible across reboots with zero crashes
+            // Cache external temporary content URIs (e.g. WhatsApp, Telegram) in cacheDir
+            // This ensures documents in Recents remain permanently accessible while strictly managing storage
             var effectiveUri = uri
             if (uri.scheme == "content") {
-                effectiveUri = FileUtils.cacheDocumentLocally(this, uri, name)
-                documentUri = effectiveUri
+                val isInternal = uri.authority == "${packageName}.fileprovider"
+                if (!isInternal) {
+                    val took = try {
+                        contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                        true
+                    } catch (e: Exception) {
+                        false
+                    }
+
+                    if (!took) {
+                        effectiveUri = FileUtils.cacheDocumentLocally(this, uri, name)
+                        documentUri = effectiveUri
+                    }
+                }
             }
 
             val mime = try { contentResolver.getType(uri) } catch (e: Exception) { null }

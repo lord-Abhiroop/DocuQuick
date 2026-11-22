@@ -72,9 +72,47 @@ object FileUtils {
         } ?: ""
     }
 
+    fun pruneCache(context: Context, maxSizeBytes: Long = 20 * 1024 * 1024, maxFiles: Int = 12) {
+        try {
+            // 1. Reclaim any legacy storage in filesDir/documents
+            val legacyDir = File(context.filesDir, "documents")
+            if (legacyDir.exists()) {
+                legacyDir.deleteRecursively()
+            }
+
+            // 2. Clean up old temporary files in cacheDir (older than 30 mins)
+            context.cacheDir.listFiles()?.forEach { file ->
+                if (file.isFile && (file.name.startsWith("pdf_") || file.name.startsWith("temp_") || file.name.startsWith("doc_"))) {
+                    if (System.currentTimeMillis() - file.lastModified() > 30 * 60 * 1000) {
+                        file.delete()
+                    }
+                }
+            }
+
+            // 3. Enforce strict LRU cap on cacheDir/documents
+            val docsDir = File(context.cacheDir, "documents")
+            if (docsDir.exists()) {
+                val files = docsDir.listFiles() ?: return
+                val sorted = files.sortedByDescending { it.lastModified() }
+                var totalSize = 0L
+
+                sorted.forEachIndexed { index, file ->
+                    totalSize += file.length()
+                    if (index >= maxFiles || totalSize > maxSizeBytes) {
+                        file.delete()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun cacheDocumentLocally(context: Context, uri: Uri, originalName: String): Uri {
         return try {
-            val docsDir = File(context.filesDir, "documents")
+            pruneCache(context)
+
+            val docsDir = File(context.cacheDir, "documents")
             if (!docsDir.exists()) docsDir.mkdirs()
 
             val safeName = originalName.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifEmpty { "document" }
@@ -90,8 +128,9 @@ object FileUtils {
                 null
             }
 
-            // If already cached and valid, return it directly
+            // If already cached and valid, refresh last modified and return it directly
             if (uri == fileProviderUri || (uri.scheme == "file" && uri.path == targetFile.absolutePath && targetFile.exists())) {
+                targetFile.setLastModified(System.currentTimeMillis())
                 return fileProviderUri ?: uri
             }
 
@@ -102,6 +141,7 @@ object FileUtils {
             }
 
             if (targetFile.exists() && targetFile.length() > 0) {
+                targetFile.setLastModified(System.currentTimeMillis())
                 fileProviderUri ?: androidx.core.content.FileProvider.getUriForFile(
                     context,
                     "${context.packageName}.fileprovider",

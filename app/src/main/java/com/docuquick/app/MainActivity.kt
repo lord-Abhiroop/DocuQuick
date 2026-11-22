@@ -11,6 +11,7 @@ import com.docuquick.app.databinding.ActivityMainBinding
 import com.docuquick.app.model.DocumentType
 import com.docuquick.app.model.RecentFile
 import com.docuquick.app.ui.RecentFilesAdapter
+import com.docuquick.app.util.FileUtils
 
 class MainActivity : AppCompatActivity() {
 
@@ -59,7 +60,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadRecentFiles() {
-        val files = app.prefs.getRecentFiles()
+        FileUtils.pruneCache(this)
+
+        val files = app.prefs.getRecentFiles().filter { recent ->
+            val uri = Uri.parse(recent.uriString)
+            if (uri.scheme == "file") {
+                java.io.File(uri.path ?: "").exists()
+            } else if (uri.authority == "${packageName}.fileprovider") {
+                val safeName = recent.name.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifEmpty { "document" }
+                val cachedFile = java.io.File(cacheDir, "documents/$safeName")
+                cachedFile.exists()
+            } else {
+                true
+            }
+        }
         recentAdapter.setFiles(files)
 
         if (files.isEmpty()) {
