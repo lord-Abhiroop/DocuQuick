@@ -80,10 +80,25 @@ class PdfAdapter(
             return try {
                 synchronized(renderer) {
                     renderer.openPage(pageIndex).use { page ->
-                        // Render at 2x density for sharp text on high-DPI smartphone screens
-                        val scale = 2.0f
-                        val width = (page.width * scale).toInt()
-                        val height = (page.height * scale).toInt()
+                        // Universal hardware-adaptive scaling for razor-sharp text on any screen
+                        val metrics = itemView.context.resources.displayMetrics
+                        val screenWidthPx = metrics.widthPixels
+                        val densityScale = metrics.density * 1.25f
+                        val widthScale = if (page.width > 0) screenWidthPx.toFloat() / page.width.toFloat() else densityScale
+                        val baseScale = maxOf(widthScale, densityScale).coerceIn(2.5f, 4.0f)
+
+                        // Guard against oversized texture limits (e.g., architectural blueprints)
+                        val maxDimension = 4096
+                        val targetWidth = (page.width * baseScale).toInt()
+                        val targetHeight = (page.height * baseScale).toInt()
+                        val finalScale = if (targetWidth > maxDimension || targetHeight > maxDimension) {
+                            minOf(maxDimension.toFloat() / page.width, maxDimension.toFloat() / page.height)
+                        } else {
+                            baseScale
+                        }
+
+                        val width = (page.width * finalScale).toInt().coerceAtLeast(1)
+                        val height = (page.height * finalScale).toInt().coerceAtLeast(1)
                         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                         bitmap.eraseColor(Color.WHITE)
                         page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
