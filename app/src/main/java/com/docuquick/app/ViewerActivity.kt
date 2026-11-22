@@ -335,7 +335,12 @@ class ViewerActivity : AppCompatActivity() {
                             function checkSlide() {
                                 var slides = document.querySelectorAll('#result .slide');
                                 if (!slides || slides.length === 0) return;
-                                var mid = window.innerHeight * 0.4;
+                                var atBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 20);
+                                if (atBottom && window.DocuQuickBridge) {
+                                    window.DocuQuickBridge.onSlideVisible(slides.length, slides.length);
+                                    return;
+                                }
+                                var mid = window.innerHeight * 0.45;
                                 for (var i = 0; i < slides.length; i++) {
                                     var r = slides[i].getBoundingClientRect();
                                     if (r.top <= mid && r.bottom >= mid) {
@@ -563,10 +568,43 @@ class ViewerActivity : AppCompatActivity() {
 
             binding.pdfRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    val firstPos = layoutManager.findFirstVisibleItemPosition()
-                    if (firstPos != RecyclerView.NO_POSITION) {
-                        binding.txtStatusPill.text = getString(R.string.page_counter, firstPos + 1, renderer.pageCount)
+                    val totalPages = renderer.pageCount
+                    if (totalPages <= 0) return
+
+                    val activePage = when {
+                        !recyclerView.canScrollVertically(1) -> totalPages
+                        !recyclerView.canScrollVertically(-1) -> 1
+                        else -> {
+                            val centerY = recyclerView.height / 2f
+                            val centerX = recyclerView.width / 2f
+                            val centerChild = recyclerView.findChildViewUnder(centerX, centerY)
+                            val centerPos = if (centerChild != null) {
+                                val pos = recyclerView.getChildAdapterPosition(centerChild)
+                                if (pos != RecyclerView.NO_POSITION) pos + 1 else null
+                            } else null
+
+                            centerPos ?: run {
+                                var maxVisibleHeight = 0
+                                var bestPos = layoutManager.findFirstVisibleItemPosition()
+                                for (i in 0 until recyclerView.childCount) {
+                                    val child = recyclerView.getChildAt(i)
+                                    val top = child.top.coerceAtLeast(0)
+                                    val bottom = child.bottom.coerceAtMost(recyclerView.height)
+                                    val visibleHeight = (bottom - top).coerceAtLeast(0)
+                                    if (visibleHeight > maxVisibleHeight) {
+                                        maxVisibleHeight = visibleHeight
+                                        val pos = recyclerView.getChildAdapterPosition(child)
+                                        if (pos != RecyclerView.NO_POSITION) {
+                                            bestPos = pos
+                                        }
+                                    }
+                                }
+                                if (bestPos != RecyclerView.NO_POSITION) bestPos + 1 else 1
+                            }
+                        }
                     }
+
+                    binding.txtStatusPill.text = getString(R.string.page_counter, activePage, totalPages)
                 }
             })
         }
