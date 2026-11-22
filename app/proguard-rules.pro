@@ -14,6 +14,10 @@
 -keep class com.docuquick.app.model.** { *; }
 -keep class com.docuquick.app.ViewerActivity$PresentationBridge { *; }
 
-# Keep Material Components
--keep class com.google.android.material.** { *; }
+# Material Components: Allow R8 to tree-shake unused widgets while preserving used components
 -dontwarn com.google.android.material.**
+-keepclassmembers class * extends android.view.View {
+    public <init>(android.content.Context);
+    public <init>(android.content.Context, android.util.AttributeSet);
+    public <init>(android.content.Context, android.util.AttributeSet, int);
+}
