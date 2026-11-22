@@ -1,14 +1,28 @@
 # DocuQuick: Ultra-Fast Android All-Document Viewer
 
-**DocuQuick** is an ultra-fast, minimalist, and battery-efficient all-document viewer designed specifically for Android smartphones. Built with modern Kotlin and Android native APIs, the entire application compiles to **under 2.5 MB** (well below the 10 MB limit) while supporting opening every major document type without bloated third-party engines.
+**DocuQuick** is an ultra-fast, minimalist, and battery-efficient all-document viewer designed specifically for Android smartphones. Built with modern Kotlin and Android native APIs, the entire application compiles to **under 3.5 MB (3.2 MB signed APK)** while supporting opening every major document type without bloated third-party engines.
+
+---
+
+## 📸 Screenshots
+
+| Clean Empty State | Recents & Cache Management | Category Filtering |
+|:---:|:---:|:---:|
+| <img src="screenshots/empty_state.jpg" width="260" alt="Clean Empty State" /> | <img src="screenshots/recent_documents.jpg" width="260" alt="Recent Documents Dashboard" /> | <img src="screenshots/category_filter.jpg" width="260" alt="Category Filter" /> |
 
 ---
 
 ## 🚀 Key Features & Highlights
 
-- **Ultra-Lean Size (< 2.5 MB APK)**:
+- **Ultra-Lean Size (3.2 MB APK)**:
   - Zero heavy external dependencies (no Apache POI, no bloated binary renderers).
   - Uses native Android hardware-accelerated APIs (`PdfRenderer`, `XmlPullParser`, `ZipInputStream`, `BitmapFactory`, and hardware-accelerated `WebView`).
+- **Universal Hardware-Adaptive Sharpness**:
+  - Dynamically queries physical display metrics at runtime (`displayMetrics.density` & `widthPixels`) to render 1:1 hardware pixel-perfect text on any screen (720p, 1080p FHD+, 1440p QHD+, AMOLED, and foldables/tablets).
+- **Password-Protected Document Unlock**:
+  - Automatically intercepts encrypted documents (Aadhaar cards, bank e-statements, payslips) and unlocks them with a floating password unlock bar and AES-256 decryption.
+- **One-Tap Cache & History Cleanup**:
+  - Dedicated trash button instantly clears recents history, WebView storage, and temp document caches with a strict 20 MB / 12-file automatic LRU cap.
 - **Zero-Latency Launch & Clean Typography**:
   - Opens documents instantly without splash screens, telemetry, or network latency.
   - Specially designed reading typography: optimal line leading (`1.45x`), generous margins (`18dp`), clear paragraph hierarchy, and high-contrast text.
