@@ -49,6 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -203,12 +204,18 @@ class ViewerActivity : AppCompatActivity() {
                 override fun handle(path: String): WebResourceResponse? {
                     val uri = documentUri ?: return null
                     return try {
-                        val stream = contentResolver.openInputStream(uri) ?: return null
                         val cleanPath = path.substringBefore('?').lowercase()
                         val ext = cleanPath.substringAfterLast('.', "").ifEmpty {
                             documentName.substringAfterLast('.', "").lowercase()
                         }
+                        val stream = if (tempPdfFile?.exists() == true && (ext == "pdf" || cleanPath.endsWith(".pdf"))) {
+                            FileInputStream(tempPdfFile)
+                        } else {
+                            contentResolver.openInputStream(uri)
+                        } ?: return null
                         val mime = when (ext) {
+                            "pdf" ->
+                                "application/pdf"
                             "pptx", "ppsx", "pptm", "potx" ->
                                 "application/vnd.openxmlformats-officedocument.presentationml.presentation"
                             "ppt", "pps", "pot" ->
@@ -267,6 +274,8 @@ class ViewerActivity : AppCompatActivity() {
         val textScaleParam = (app.prefs.textSizeScale * 100).toInt()
 
         binding.loadingLayout.visibility = View.VISIBLE
+        binding.pdfRecyclerView.visibility = View.GONE
+        binding.docImageView.visibility = View.GONE
         binding.epubWebView.visibility = View.VISIBLE
         binding.statusPillCard.visibility = View.VISIBLE
         binding.txtStatusPill.text = label
@@ -283,7 +292,11 @@ class ViewerActivity : AppCompatActivity() {
         fun onSlideVisible(current: Int, total: Int) {
             runOnUiThread {
                 binding.statusPillCard.visibility = View.VISIBLE
-                binding.txtStatusPill.text = "Slide $current of $total"
+                if (documentType == DocumentType.PPT) {
+                    binding.txtStatusPill.text = "Slide $current of $total"
+                } else {
+                    binding.txtStatusPill.text = getString(R.string.page_counter, current, total)
+                }
             }
         }
     }
@@ -324,6 +337,25 @@ class ViewerActivity : AppCompatActivity() {
                     view: WebView,
                     request: WebResourceRequest
                 ): WebResourceResponse? {
+                    val path = request.url.path ?: return assetLoader.shouldInterceptRequest(request.url)
+                    if (path.endsWith(".mjs")) {
+                        return try {
+                            val assetPath = path.removePrefix("/assets/")
+                            val stream = assets.open(assetPath)
+                            WebResourceResponse("text/javascript", "UTF-8", stream)
+                        } catch (e: Exception) {
+                            assetLoader.shouldInterceptRequest(request.url)
+                        }
+                    }
+                    if (path.endsWith(".wasm")) {
+                        return try {
+                            val assetPath = path.removePrefix("/assets/")
+                            val stream = assets.open(assetPath)
+                            WebResourceResponse("application/wasm", null, stream)
+                        } catch (e: Exception) {
+                            assetLoader.shouldInterceptRequest(request.url)
+                        }
+                    }
                     return assetLoader.shouldInterceptRequest(request.url)
                 }
 
@@ -336,7 +368,7 @@ class ViewerActivity : AppCompatActivity() {
                             if (window._dqTrackingInstalled) return;
                             window._dqTrackingInstalled = true;
                             function checkSlide() {
-                                var slides = document.querySelectorAll('#result .slide');
+                                var slides = document.querySelectorAll('#result .slide, #pages .pg');
                                 if (!slides || slides.length === 0) return;
                                 var atBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 20);
                                 if (atBottom && window.DocuQuickBridge) {
@@ -555,61 +587,88 @@ class ViewerActivity : AppCompatActivity() {
         tempPdfFile = temp
         val pfd = ParcelFileDescriptor.open(temp, ParcelFileDescriptor.MODE_READ_ONLY)
         pdfFileDescriptor = pfd
-        val renderer = PdfRenderer(pfd)
-        pdfRenderer = renderer
+        try {
+            val renderer = PdfRenderer(pfd)
+            pdfRenderer = renderer
 
-        withContext(Dispatchers.Main) {
-            binding.loadingLayout.visibility = View.GONE
-            binding.pdfRecyclerView.visibility = View.VISIBLE
+            withContext(Dispatchers.Main) {
+                binding.loadingLayout.visibility = View.GONE
+                binding.epubWebView.visibility = View.GONE
+                binding.docImageView.visibility = View.GONE
+                binding.pdfRecyclerView.visibility = View.VISIBLE
 
-            val adapter = PdfAdapter(renderer, lifecycleScope)
-            val layoutManager = LinearLayoutManager(this@ViewerActivity)
-            binding.pdfRecyclerView.layoutManager = layoutManager
-            binding.pdfRecyclerView.adapter = adapter
+                val adapter = PdfAdapter(renderer, lifecycleScope)
+                val layoutManager = LinearLayoutManager(this@ViewerActivity)
+                binding.pdfRecyclerView.layoutManager = layoutManager
+                binding.pdfRecyclerView.adapter = adapter
 
-            binding.txtStatusPill.text = getString(R.string.page_counter, 1, renderer.pageCount)
+                binding.txtStatusPill.text = getString(R.string.page_counter, 1, renderer.pageCount)
 
-            binding.pdfRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    val totalPages = renderer.pageCount
-                    if (totalPages <= 0) return
+                binding.pdfRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                    override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                        val totalPages = renderer.pageCount
+                        if (totalPages <= 0) return
 
-                    val activePage = when {
-                        !recyclerView.canScrollVertically(1) -> totalPages
-                        !recyclerView.canScrollVertically(-1) -> 1
-                        else -> {
-                            val centerY = recyclerView.height / 2f
-                            val centerX = recyclerView.width / 2f
-                            val centerChild = recyclerView.findChildViewUnder(centerX, centerY)
-                            val centerPos = if (centerChild != null) {
-                                val pos = recyclerView.getChildAdapterPosition(centerChild)
-                                if (pos != RecyclerView.NO_POSITION) pos + 1 else null
-                            } else null
+                        val activePage = when {
+                            !recyclerView.canScrollVertically(1) -> totalPages
+                            !recyclerView.canScrollVertically(-1) -> 1
+                            else -> {
+                                val centerY = recyclerView.height / 2f
+                                val centerX = recyclerView.width / 2f
+                                val centerChild = recyclerView.findChildViewUnder(centerX, centerY)
+                                val centerPos = if (centerChild != null) {
+                                    val pos = recyclerView.getChildAdapterPosition(centerChild)
+                                    if (pos != RecyclerView.NO_POSITION) pos + 1 else null
+                                } else null
 
-                            centerPos ?: run {
-                                var maxVisibleHeight = 0
-                                var bestPos = layoutManager.findFirstVisibleItemPosition()
-                                for (i in 0 until recyclerView.childCount) {
-                                    val child = recyclerView.getChildAt(i)
-                                    val top = child.top.coerceAtLeast(0)
-                                    val bottom = child.bottom.coerceAtMost(recyclerView.height)
-                                    val visibleHeight = (bottom - top).coerceAtLeast(0)
-                                    if (visibleHeight > maxVisibleHeight) {
-                                        maxVisibleHeight = visibleHeight
-                                        val pos = recyclerView.getChildAdapterPosition(child)
-                                        if (pos != RecyclerView.NO_POSITION) {
-                                            bestPos = pos
+                                centerPos ?: run {
+                                    var maxVisibleHeight = 0
+                                    var bestPos = layoutManager.findFirstVisibleItemPosition()
+                                    for (i in 0 until recyclerView.childCount) {
+                                        val child = recyclerView.getChildAt(i)
+                                        val top = child.top.coerceAtLeast(0)
+                                        val bottom = child.bottom.coerceAtMost(recyclerView.height)
+                                        val visibleHeight = (bottom - top).coerceAtLeast(0)
+                                        if (visibleHeight > maxVisibleHeight) {
+                                            maxVisibleHeight = visibleHeight
+                                            val pos = recyclerView.getChildAdapterPosition(child)
+                                            if (pos != RecyclerView.NO_POSITION) {
+                                                bestPos = pos
+                                            }
                                         }
                                     }
+                                    if (bestPos != RecyclerView.NO_POSITION) bestPos + 1 else 1
                                 }
-                                if (bestPos != RecyclerView.NO_POSITION) bestPos + 1 else 1
                             }
                         }
-                    }
 
-                    binding.txtStatusPill.text = getString(R.string.page_counter, activePage, totalPages)
+                        binding.txtStatusPill.text = getString(R.string.page_counter, activePage, totalPages)
+                    }
+                })
+            }
+        } catch (e: SecurityException) {
+            // Password-protected PDF detected! Switch to web viewer with floating unlock bar
+            try {
+                pfd.close()
+            } catch (ignored: Exception) {}
+            pdfFileDescriptor = null
+            pdfRenderer = null
+            withContext(Dispatchers.Main) {
+                loadWebDocument("pdf.html", "pdf", "Protected PDF")
+            }
+        } catch (e: Exception) {
+            if (e.message?.contains("password", ignoreCase = true) == true) {
+                try {
+                    pfd.close()
+                } catch (ignored: Exception) {}
+                pdfFileDescriptor = null
+                pdfRenderer = null
+                withContext(Dispatchers.Main) {
+                    loadWebDocument("pdf.html", "pdf", "Protected PDF")
                 }
-            })
+            } else {
+                throw e
+            }
         }
     }
 
