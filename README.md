@@ -1,6 +1,19 @@
-# DocuQuick: Ultra-Fast Android All-Document Viewer
+<p align="center">
+  <img src="screenshots/icon.png" width="120" height="120" alt="DocuQuick Logo" />
+</p>
 
-**DocuQuick** is an ultra-fast, minimalist, and battery-efficient all-document viewer designed specifically for Android smartphones. Built with modern Kotlin and Android native APIs, the entire application compiles to **under 3.5 MB (3.2 MB signed APK)** while supporting opening every major document type without bloated third-party engines.
+<h1 align="center">DocuQuick: Ultra-Fast Android All-Document Viewer</h1>
+
+<p align="center">
+  <b>Minimalist, battery-efficient, and 100% offline all-document viewer for Android smartphones (&lt;3.5 MB)</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/lord-Abhiroop/DocuQuick/releases/latest"><img src="https://img.shields.io/github/v/release/lord-Abhiroop/DocuQuick?color=0284C7&label=Release" alt="Latest Release" /></a>
+  <img src="https://img.shields.io/badge/APK%20Size-3.2%20MB-success?color=16A34A" alt="APK Size" />
+  <img src="https://img.shields.io/badge/Privacy-100%25%20Offline-blueviolet" alt="100% Offline" />
+  <img src="https://img.shields.io/badge/Android-7.0%2B%20(API%2024%2B)-informational" alt="Android Support" />
+</p>
 
 ---
 
