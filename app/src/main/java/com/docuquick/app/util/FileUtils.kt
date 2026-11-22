@@ -80,16 +80,22 @@ object FileUtils {
                 legacyDir.deleteRecursively()
             }
 
-            // 2. Clean up old temporary files in cacheDir (older than 30 mins)
+            // 2. Clean up temporary render spool files in cacheDir (older than 2 mins)
             context.cacheDir.listFiles()?.forEach { file ->
                 if (file.isFile && (file.name.startsWith("pdf_") || file.name.startsWith("temp_") || file.name.startsWith("doc_"))) {
-                    if (System.currentTimeMillis() - file.lastModified() > 30 * 60 * 1000) {
+                    if (System.currentTimeMillis() - file.lastModified() > 2 * 60 * 1000) {
                         file.delete()
                     }
                 }
             }
 
-            // 3. Enforce strict LRU cap on cacheDir/documents
+            // 3. Clear Chromium WebView disk cache
+            val webviewCache = File(context.cacheDir, "WebView")
+            if (webviewCache.exists()) {
+                webviewCache.deleteRecursively()
+            }
+
+            // 4. Enforce LRU cap on cacheDir/documents (20 MB / 12 files preserved)
             val docsDir = File(context.cacheDir, "documents")
             if (docsDir.exists()) {
                 val files = docsDir.listFiles() ?: return

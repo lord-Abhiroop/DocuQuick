@@ -23,8 +23,11 @@ class PreferencesManager(context: Context) {
         val current = getRecentFiles().toMutableList()
         current.removeAll { it.uriString == file.uriString }
         current.add(0, file)
+        saveRecentFiles(current)
+    }
 
-        val trimmed = current.take(MAX_RECENTS)
+    fun saveRecentFiles(files: List<RecentFile>) {
+        val trimmed = files.take(MAX_RECENTS)
         val array = JSONArray()
         trimmed.forEach { item ->
             val obj = JSONObject().apply {

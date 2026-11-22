@@ -62,7 +62,8 @@ class MainActivity : AppCompatActivity() {
     private fun loadRecentFiles() {
         FileUtils.pruneCache(this)
 
-        val files = app.prefs.getRecentFiles().filter { recent ->
+        val allRecent = app.prefs.getRecentFiles()
+        val files = allRecent.filter { recent ->
             val uri = Uri.parse(recent.uriString)
             if (uri.scheme == "file") {
                 java.io.File(uri.path ?: "").exists()
@@ -73,6 +74,9 @@ class MainActivity : AppCompatActivity() {
             } else {
                 true
             }
+        }
+        if (files.size != allRecent.size) {
+            app.prefs.saveRecentFiles(files)
         }
         recentAdapter.setFiles(files)
 
