@@ -39,16 +39,19 @@ enum class DocumentType(
             return when {
                 extension == "pdf" || mime == "application/pdf" -> PDF
 
-                extension in listOf("docx", "doc") ||
+                extension in listOf("docx", "doc", "dot", "dotx", "docm", "odt", "ott", "fodt", "rtf") ||
                         mime.contains("wordprocessingml") ||
-                        mime.contains("msword") -> WORD
+                        mime.contains("msword") ||
+                        mime.contains("opendocument.text") ||
+                        mime.contains("rtf") -> WORD
 
-                extension in listOf("xlsx", "xls", "csv", "tsv") ||
+                extension in listOf("xlsx", "xls", "csv", "tsv", "ods", "xlsm", "xlsb", "xltx") ||
                         mime.contains("spreadsheetml") ||
                         mime.contains("ms-excel") ||
+                        mime.contains("opendocument.spreadsheet") ||
                         mime.contains("csv") -> EXCEL
 
-                extension in listOf("pptx", "ppt", "pps", "ppsx") ||
+                extension in listOf("pptx", "ppt", "pps", "ppsx", "pptm", "potx", "pot") ||
                         mime.contains("presentationml") ||
                         mime.contains("ms-powerpoint") -> PPT
 
@@ -58,7 +61,7 @@ enum class DocumentType(
                 extension == "epub" ||
                         mime.contains("epub") -> EPUB
 
-                extension in listOf("txt", "log", "rtf") ||
+                extension in listOf("txt", "log") ||
                         mime.startsWith("text/plain") -> TEXT
 
                 extension in listOf(

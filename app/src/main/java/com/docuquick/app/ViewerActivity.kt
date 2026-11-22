@@ -30,7 +30,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewFeature
 import com.docuquick.app.databinding.ActivityViewerBinding
 import com.docuquick.app.model.DocumentType
 import com.docuquick.app.model.RecentFile
@@ -199,18 +201,53 @@ class ViewerActivity : AppCompatActivity() {
                     val uri = documentUri ?: return null
                     return try {
                         val stream = contentResolver.openInputStream(uri) ?: return null
-                        val mime = when {
-                            path.endsWith(".pptx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                            path.endsWith(".docx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            path.endsWith(".xlsx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        val cleanPath = path.substringBefore('?').lowercase()
+                        val ext = cleanPath.substringAfterLast('.', "").ifEmpty {
+                            documentName.substringAfterLast('.', "").lowercase()
+                        }
+                        val mime = when (ext) {
+                            "pptx", "ppsx", "pptm", "potx" ->
+                                "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            "ppt", "pps", "pot" ->
+                                "application/vnd.ms-powerpoint"
+                            "docx", "docm", "dotx" ->
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            "doc", "dot" ->
+                                "application/msword"
+                            "xlsx", "xlsm", "xlsb", "xltx" ->
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            "xls" ->
+                                "application/vnd.ms-excel"
+                            "csv" ->
+                                "text/csv"
+                            "tsv" ->
+                                "text/tab-separated-values"
+                            "odt", "ott", "fodt" ->
+                                "application/vnd.oasis.opendocument.text"
+                            "ods" ->
+                                "application/vnd.oasis.opendocument.spreadsheet"
+                            "rtf" ->
+                                "application/rtf"
+                            "epub" ->
+                                "application/epub+zip"
+                            "md", "markdown" ->
+                                "text/markdown"
+                            "txt", "log" ->
+                                "text/plain"
+                            "json" ->
+                                "application/json"
+                            "xml" ->
+                                "application/xml"
                             else -> contentResolver.getType(uri) ?: "application/octet-stream"
                         }
+                        val encoding = if (mime.startsWith("text/") || mime == "application/json" || mime == "application/xml") "UTF-8" else null
                         val headers = mapOf(
                             "Access-Control-Allow-Origin" to "*",
                             "Access-Control-Allow-Methods" to "GET, OPTIONS",
-                            "Access-Control-Allow-Headers" to "*"
+                            "Access-Control-Allow-Headers" to "*",
+                            "X-Gander-Encoding" to "UTF-8"
                         )
-                        WebResourceResponse(mime, null, 200, "OK", headers, stream)
+                        WebResourceResponse(mime, encoding, 200, "OK", headers, stream)
                     } catch (e: Exception) {
                         e.printStackTrace()
                         null
@@ -218,6 +255,24 @@ class ViewerActivity : AppCompatActivity() {
                 }
             })
             .build()
+    }
+
+    private fun loadWebDocument(pageHtml: String, ext: String, label: String) {
+        val isDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES || app.prefs.themeMode in listOf(2, 3)
+        val nightParam = if (isDark) "1" else "0"
+        val textScaleParam = (app.prefs.textSizeScale * 100).toInt()
+
+        binding.loadingLayout.visibility = View.VISIBLE
+        binding.epubWebView.visibility = View.VISIBLE
+        binding.statusPillCard.visibility = View.VISIBLE
+        binding.txtStatusPill.text = label
+
+        setupWebView()
+
+        val encodedName = URLEncoder.encode(documentName, "UTF-8")
+        val url = "https://appassets.androidplatform.net/assets/viewer/$pageHtml?name=$encodedName&ext=$ext&night=$nightParam&type=$textScaleParam"
+        binding.epubWebView.loadUrl(url)
     }
 
     inner class PresentationBridge {
@@ -232,6 +287,9 @@ class ViewerActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
+        val isDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES || app.prefs.themeMode in listOf(2, 3)
+
         binding.epubWebView.apply {
             settings.apply {
                 javaScriptEnabled = true
@@ -242,7 +300,20 @@ class ViewerActivity : AppCompatActivity() {
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 setSupportZoom(true)
+                textZoom = (app.prefs.textSizeScale * 100).toInt()
             }
+
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+                val forceDark = if (isDark) WebSettingsCompat.FORCE_DARK_ON else WebSettingsCompat.FORCE_DARK_OFF
+                WebSettingsCompat.setForceDark(settings, forceDark)
+            }
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
+                WebSettingsCompat.setForceDarkStrategy(settings, WebSettingsCompat.DARK_STRATEGY_WEB_THEME_DARKENING_ONLY)
+            }
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, false)
+            }
+
             removeJavascriptInterface("DocuQuickBridge")
             addJavascriptInterface(PresentationBridge(), "DocuQuickBridge")
             webViewClient = object : WebViewClient() {
@@ -502,50 +573,31 @@ class ViewerActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // 2. Microsoft Word (DOCX) Loader
+    // 2. Microsoft Word & Rich Text (DOCX, DOC, ODT, RTF) Loader
     // =========================================================================
     private suspend fun loadWordDocument(uri: Uri) {
-        val extension = documentName.substringAfterLast('.', "").lowercase()
-        if (extension == "docx") {
-            withContext(Dispatchers.Main) {
-                binding.loadingLayout.visibility = View.VISIBLE
-                binding.epubWebView.visibility = View.VISIBLE
-                binding.statusPillCard.visibility = View.VISIBLE
-                binding.txtStatusPill.text = "Word Document"
-                setupWebView()
-                val encodedName = URLEncoder.encode(documentName, "UTF-8")
-                val url = "https://appassets.androidplatform.net/assets/viewer/docx.html?name=$encodedName&ext=docx"
-                binding.epubWebView.loadUrl(url)
-            }
-        } else {
-            val ssb = contentResolver.openInputStream(uri)?.use { stream ->
-                DocxParser.parseDocx(stream)
-            } ?: SpannableStringBuilder("Unable to read Word document.")
-
-            withContext(Dispatchers.Main) {
-                displayTextContent(ssb, "Word Document")
+        val extension = documentName.substringAfterLast('.', "").lowercase().ifEmpty { "docx" }
+        withContext(Dispatchers.Main) {
+            if (extension in listOf("doc", "dot", "odt", "ott", "fodt", "rtf")) {
+                loadWebDocument("prose.html", extension, "Document")
+            } else {
+                loadWebDocument("docx.html", extension, "Word Document")
             }
         }
     }
 
     // =========================================================================
-    // 3. Spreadsheet (XLSX, CSV) Loader
+    // 3. Spreadsheet (XLSX, XLS, CSV, TSV, ODS) Loader
     // =========================================================================
     private suspend fun loadSpreadsheetDocument(uri: Uri) {
-        val extension = documentName.substringAfterLast('.', "").lowercase()
-        val sheetData: SheetData = contentResolver.openInputStream(uri)?.use { stream ->
-            if (extension in listOf("csv", "tsv")) {
-                ExcelParser.parseCsv(stream)
-            } else {
-                ExcelParser.parseXlsx(stream)
-            }
-        } ?: SheetData("Sheet", emptyList(), emptyList())
-
+        val extension = documentName.substringAfterLast('.', "").lowercase().ifEmpty { "xlsx" }
         withContext(Dispatchers.Main) {
-            binding.loadingLayout.visibility = View.GONE
-            binding.tableHorizontalScrollView.visibility = View.VISIBLE
-            populateTableView(sheetData)
-            binding.txtStatusPill.text = getString(R.string.sheet_rows, sheetData.rows.size, sheetData.headers.size)
+            val label = when (extension) {
+                "csv", "tsv" -> "CSV Spreadsheet"
+                "ods" -> "OpenDocument Sheet"
+                else -> "Excel Spreadsheet"
+            }
+            loadWebDocument("xlsx.html", extension, label)
         }
     }
 
@@ -553,8 +605,7 @@ class ViewerActivity : AppCompatActivity() {
     // 4. PowerPoint Presentation (PPTX, PPT) Loader
     // =========================================================================
     private suspend fun loadPresentationDocument(uri: Uri) {
-        val extension = documentName.substringAfterLast('.', "").lowercase()
-        val isPptx = (extension == "pptx" || extension == "ppsx" || extension.isEmpty())
+        val extension = documentName.substringAfterLast('.', "").lowercase().ifEmpty { "pptx" }
 
         // Count slides quickly from zip entries in background IO
         val slideCount = withContext(Dispatchers.IO) {
@@ -578,130 +629,44 @@ class ViewerActivity : AppCompatActivity() {
         }
 
         withContext(Dispatchers.Main) {
-            binding.loadingLayout.visibility = View.VISIBLE
-            binding.epubWebView.visibility = View.VISIBLE
-            binding.statusPillCard.visibility = View.VISIBLE
-            binding.txtStatusPill.text = if (slideCount > 0) "$slideCount Slides • Presentation" else "Presentation"
-
-            setupWebView()
-
-            if (isPptx) {
-                val encodedName = URLEncoder.encode(documentName, "UTF-8")
-                val url = "https://appassets.androidplatform.net/assets/viewer/pptx.html?name=$encodedName&ext=pptx"
-                binding.epubWebView.loadUrl(url)
-            } else {
-                // Fallback for legacy binary .ppt files
-                val isDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-                        android.content.res.Configuration.UI_MODE_NIGHT_YES
-                val (html, _) = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { stream ->
-                        PptxParser.parseToHtml(stream, false, isDark)
-                    } ?: Pair("<html><body>Unable to read presentation.</body></html>", 0)
-                }
-                binding.loadingLayout.visibility = View.GONE
-                binding.epubWebView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
-            }
-        }
-    }
-
-    private fun populateTableView(data: SheetData) {
-        val tableLayout = binding.sheetTableLayout
-        tableLayout.removeAllViews()
-
-        // 1. Header Row
-        if (data.headers.isNotEmpty()) {
-            val headerRow = TableRow(this)
-            headerRow.setBackgroundColor(ContextCompat.getColor(this, R.color.surface_variant_light))
-
-            // Top-left corner index
-            val idxHeader = createTableCell("#", isHeader = true)
-            headerRow.addView(idxHeader)
-
-            data.headers.forEach { h ->
-                headerRow.addView(createTableCell(h, isHeader = true))
-            }
-            tableLayout.addView(headerRow)
-        }
-
-        // 2. Data Rows
-        data.rows.forEachIndexed { rIdx, row ->
-            val tableRow = TableRow(this)
-            // Row number cell
-            tableRow.addView(createTableCell((rIdx + 1).toString(), isHeader = true))
-
-            row.forEach { cellText ->
-                tableRow.addView(createTableCell(cellText, isHeader = false))
-            }
-            tableLayout.addView(tableRow)
-        }
-    }
-
-    private fun createTableCell(text: String, isHeader: Boolean): TextView {
-        return TextView(this).apply {
-            this.text = text
-            setPadding(24, 16, 24, 16)
-            textSize = if (isHeader) 12f else 13f
-            typeface = if (isHeader) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
-            setTextColor(
-                if (isHeader) ContextCompat.getColor(context, R.color.accent_cyan)
-                else ContextCompat.getColor(context, R.color.text_primary_light)
-            )
-            gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            setTextIsSelectable(true)
+            val label = if (slideCount > 0) "$slideCount Slides • Presentation" else "Presentation"
+            loadWebDocument("pptx.html", extension, label)
         }
     }
 
     // =========================================================================
-    // 4. Markdown & Text Loader
+    // 5. Markdown Loader
     // =========================================================================
     private suspend fun loadMarkdownDocument(uri: Uri) {
-        val raw = FileUtils.readStringFromUri(this@ViewerActivity, uri)
-        val ssb = MarkdownParser.parseMarkdown(raw)
+        val extension = documentName.substringAfterLast('.', "").lowercase().ifEmpty { "md" }
         withContext(Dispatchers.Main) {
-            displayTextContent(ssb, "Markdown Document")
+            loadWebDocument("md.html", extension, "Markdown Document")
         }
     }
 
+    // =========================================================================
+    // 6. Text & Code Loader
+    // =========================================================================
     private suspend fun loadTextDocument(uri: Uri) {
-        val raw = FileUtils.readStringFromUri(this@ViewerActivity, uri)
-        val ssb = SpannableStringBuilder(raw)
+        val extension = documentName.substringAfterLast('.', "").lowercase().ifEmpty { "txt" }
         withContext(Dispatchers.Main) {
-            displayTextContent(ssb, "Text Document")
+            loadWebDocument("text.html", extension, "Text Document")
         }
     }
 
-    // =========================================================================
-    // 5. Code & Data Files Loader
-    // =========================================================================
     private suspend fun loadCodeDocument(uri: Uri) {
-        val raw = FileUtils.readStringFromUri(this@ViewerActivity, uri)
-        val ext = documentName.substringAfterLast('.', "").lowercase()
-        val ssb = CodeHighlighter.highlightCode(raw, ext)
+        val extension = documentName.substringAfterLast('.', "").lowercase().ifEmpty { "txt" }
         withContext(Dispatchers.Main) {
-            displayTextContent(ssb, "Code File (${ext.uppercase()})")
+            loadWebDocument("text.html", extension, "${extension.uppercase()} File")
         }
     }
 
     // =========================================================================
-    // 6. EPUB E-Book Loader
+    // 7. EPUB E-Book Loader
     // =========================================================================
     private suspend fun loadEpubDocument(uri: Uri) {
-        val isDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-                android.content.res.Configuration.UI_MODE_NIGHT_YES
-        val html = contentResolver.openInputStream(uri)?.use { stream ->
-            EpubParser.parseEpub(stream, isDark)
-        } ?: "<html><body>Unable to load EPUB</body></html>"
-
         withContext(Dispatchers.Main) {
-            binding.loadingLayout.visibility = View.GONE
-            binding.epubWebView.visibility = View.VISIBLE
-            binding.epubWebView.settings.apply {
-                builtInZoomControls = true
-                displayZoomControls = false
-                javaScriptEnabled = false
-            }
-            binding.epubWebView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
-            binding.txtStatusPill.text = "EPUB Reader Mode"
+            loadWebDocument("epub.html", "epub", "EPUB Book")
         }
     }
 
@@ -746,6 +711,20 @@ class ViewerActivity : AppCompatActivity() {
     // 8. In-Document Search Implementation
     // =========================================================================
     private fun setupSearchPanel() {
+        binding.epubWebView.setFindListener { activeMatchOrdinal, numberOfMatches, _ ->
+            if (binding.epubWebView.visibility == View.VISIBLE) {
+                if (numberOfMatches > 0) {
+                    binding.txtSearchCount.text = getString(
+                        R.string.search_matches,
+                        activeMatchOrdinal + 1,
+                        numberOfMatches
+                    )
+                } else {
+                    binding.txtSearchCount.text = getString(R.string.no_matches)
+                }
+            }
+        }
+
         binding.btnCloseSearch.setOnClickListener {
             binding.searchPanel.visibility = View.GONE
             clearSearchHighlights()
@@ -760,7 +739,9 @@ class ViewerActivity : AppCompatActivity() {
         })
 
         binding.btnSearchNext.setOnClickListener {
-            if (searchMatchIndices.isNotEmpty()) {
+            if (binding.epubWebView.visibility == View.VISIBLE) {
+                binding.epubWebView.findNext(true)
+            } else if (searchMatchIndices.isNotEmpty()) {
                 currentMatchIndex = (currentMatchIndex + 1) % searchMatchIndices.size
                 updateSearchIndicator()
                 scrollToCurrentMatch()
@@ -768,7 +749,9 @@ class ViewerActivity : AppCompatActivity() {
         }
 
         binding.btnSearchPrev.setOnClickListener {
-            if (searchMatchIndices.isNotEmpty()) {
+            if (binding.epubWebView.visibility == View.VISIBLE) {
+                binding.epubWebView.findNext(false)
+            } else if (searchMatchIndices.isNotEmpty()) {
                 currentMatchIndex = if (currentMatchIndex - 1 < 0) searchMatchIndices.size - 1 else currentMatchIndex - 1
                 updateSearchIndicator()
                 scrollToCurrentMatch()
@@ -777,6 +760,16 @@ class ViewerActivity : AppCompatActivity() {
     }
 
     private fun performSearch(query: String) {
+        if (binding.epubWebView.visibility == View.VISIBLE) {
+            if (query.isBlank()) {
+                binding.txtSearchCount.text = ""
+                binding.epubWebView.clearMatches()
+            } else {
+                binding.epubWebView.findAllAsync(query)
+            }
+            return
+        }
+
         searchMatchIndices.clear()
         currentMatchIndex = -1
 
@@ -836,6 +829,9 @@ class ViewerActivity : AppCompatActivity() {
     }
 
     private fun clearSearchHighlights() {
+        if (binding.epubWebView.visibility == View.VISIBLE) {
+            binding.epubWebView.clearMatches()
+        }
         originalSpannedText?.let {
             binding.contentTextView.text = it
         }
@@ -865,6 +861,9 @@ class ViewerActivity : AppCompatActivity() {
             }
             app.prefs.textSizeScale = newScale
             binding.contentTextView.textSize = baseTextSizeSp * newScale
+            if (binding.epubWebView.visibility == View.VISIBLE) {
+                binding.epubWebView.settings.textZoom = (newScale * 100).toInt()
+            }
             dialog.dismiss()
         }
         dialog.show()
@@ -872,23 +871,35 @@ class ViewerActivity : AppCompatActivity() {
 
     private fun toggleReadingTheme() {
         // Toggle background between White, Soft Sepia, and AMOLED Black
-        val currentBg = binding.viewerRootLayout.background
         when (app.prefs.themeMode) {
             0, 1 -> { // Switch to Sepia
                 app.prefs.themeMode = 4
                 binding.viewerRootLayout.setBackgroundColor(Color.parseColor("#FBF0D9"))
                 binding.contentTextView.setTextColor(Color.parseColor("#5F4B32"))
+                applyWebViewNightMode(false)
             }
             4 -> { // Switch to AMOLED Black
                 app.prefs.themeMode = 3
                 binding.viewerRootLayout.setBackgroundColor(Color.parseColor("#000000"))
                 binding.contentTextView.setTextColor(Color.parseColor("#E2E8F0"))
+                applyWebViewNightMode(true)
             }
             else -> { // Switch to Default
                 app.prefs.themeMode = 1
                 binding.viewerRootLayout.setBackgroundColor(ContextCompat.getColor(this, R.color.background_light))
                 binding.contentTextView.setTextColor(ContextCompat.getColor(this, R.color.text_primary_light))
+                applyWebViewNightMode(false)
             }
+        }
+    }
+
+    private fun applyWebViewNightMode(isNight: Boolean) {
+        if (binding.epubWebView.visibility == View.VISIBLE) {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+                val forceDark = if (isNight) WebSettingsCompat.FORCE_DARK_ON else WebSettingsCompat.FORCE_DARK_OFF
+                WebSettingsCompat.setForceDark(binding.epubWebView.settings, forceDark)
+            }
+            binding.epubWebView.evaluateJavascript("if (typeof vwSetNight === 'function') vwSetNight($isNight);", null)
         }
     }
 
