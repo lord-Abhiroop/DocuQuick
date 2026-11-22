@@ -39,6 +39,7 @@ class MainActivity : AppCompatActivity() {
 
         setupRecyclerView()
         setupFilterChips()
+        setupClearHistory()
         setupFab()
     }
 
@@ -59,21 +60,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupClearHistory() {
+        binding.btnClearHistory.setOnClickListener {
+            FileUtils.clearAllHistoryAndCache(this)
+            app.prefs.clearRecents()
+            loadRecentFiles()
+            android.widget.Toast.makeText(this, "History and document cache cleared", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun loadRecentFiles() {
         FileUtils.pruneCache(this)
 
         val allRecent = app.prefs.getRecentFiles()
         val files = allRecent.filter { recent ->
             val uri = Uri.parse(recent.uriString)
-            if (uri.scheme == "file") {
-                java.io.File(uri.path ?: "").exists()
-            } else if (uri.authority == "${packageName}.fileprovider") {
-                val safeName = recent.name.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifEmpty { "document" }
-                val cachedFile = java.io.File(cacheDir, "documents/$safeName")
-                cachedFile.exists()
-            } else {
-                true
-            }
+            FileUtils.isUriAccessible(this, uri)
         }
         if (files.size != allRecent.size) {
             app.prefs.saveRecentFiles(files)
@@ -83,9 +85,11 @@ class MainActivity : AppCompatActivity() {
         if (files.isEmpty()) {
             binding.emptyStateLayout.visibility = View.VISIBLE
             binding.recentsRecyclerView.visibility = View.GONE
+            binding.btnClearHistory.visibility = View.GONE
         } else {
             binding.emptyStateLayout.visibility = View.GONE
             binding.recentsRecyclerView.visibility = View.VISIBLE
+            binding.btnClearHistory.visibility = View.VISIBLE
         }
     }
 

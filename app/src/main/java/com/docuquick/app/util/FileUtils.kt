@@ -162,6 +162,45 @@ object FileUtils {
         }
     }
 
+    fun clearAllHistoryAndCache(context: Context) {
+        try {
+            // 1. Delete all cached documents
+            val docsDir = File(context.cacheDir, "documents")
+            if (docsDir.exists()) {
+                docsDir.deleteRecursively()
+            }
+            // 2. Delete legacy documents
+            val legacyDir = File(context.filesDir, "documents")
+            if (legacyDir.exists()) {
+                legacyDir.deleteRecursively()
+            }
+            // 3. Delete all temp files and WebView cache in cacheDir
+            context.cacheDir.listFiles()?.forEach { file ->
+                if (file.isFile) file.delete()
+                else if (file.name == "WebView" || file.name == "documents") file.deleteRecursively()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun isUriAccessible(context: Context, uri: Uri): Boolean {
+        return try {
+            if (uri.scheme == "file") {
+                val f = File(uri.path ?: "")
+                f.exists() && f.canRead()
+            } else if (uri.authority == "${context.packageName}.fileprovider") {
+                val safeName = uri.lastPathSegment ?: return false
+                val f = File(context.cacheDir, "documents/$safeName")
+                f.exists() && f.length() > 0
+            } else {
+                context.contentResolver.openInputStream(uri)?.use { true } ?: false
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun formatLastOpened(timeMs: Long): String {
         return DateUtils.getRelativeTimeSpanString(
             timeMs,

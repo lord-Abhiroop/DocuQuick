@@ -161,6 +161,9 @@ class ViewerActivity : AppCompatActivity() {
                         documentUri = effectiveUri
                     }
                 }
+            } else if (uri.scheme == "file") {
+                effectiveUri = FileUtils.cacheDocumentLocally(this, uri, name)
+                documentUri = effectiveUri
             }
 
             val mime = try { contentResolver.getType(uri) } catch (e: Exception) { null }
