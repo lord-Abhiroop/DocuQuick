@@ -77,6 +77,22 @@ class PreferencesManager(context: Context) {
         prefs.edit().remove(KEY_RECENTS).apply()
     }
 
+    fun getDocumentPosition(uriString: String): Int {
+        return prefs.getInt("pos_${uriString.hashCode()}", 1)
+    }
+
+    fun saveDocumentPosition(uriString: String, page: Int) {
+        prefs.edit().putInt("pos_${uriString.hashCode()}", page).apply()
+    }
+
+    fun getDocumentScrollY(uriString: String): Int {
+        return prefs.getInt("scroll_${uriString.hashCode()}", 0)
+    }
+
+    fun saveDocumentScrollY(uriString: String, y: Int) {
+        prefs.edit().putInt("scroll_${uriString.hashCode()}", y).apply()
+    }
+
     var textSizeScale: Float
         get() = prefs.getFloat(KEY_TEXT_SIZE_SCALE, 1.0f)
         set(value) = prefs.edit().putFloat(KEY_TEXT_SIZE_SCALE, value).apply()

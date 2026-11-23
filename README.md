@@ -44,8 +44,16 @@
 - **Universal Android Integration**:
   - Registered intent filters for all document MIME types and extensions.
   - Seamlessly handles *"Open with..."* and *"Share to..."* from WhatsApp, Telegram, Gmail, Chrome, and Android Files.
-- **Adaptive Reading Themes**:
-  - Light mode, Dark mode, **Pure AMOLED Black** (saves battery on OLED displays), and **Warm Sepia** eye-care mode.
+- **Reading Position Memory (Auto-Resume)**:
+  - Automatically remembers and restores your exact reading page (PDF) and scroll position (Word, Markdown, EPUB, Code, Text) across app launches.
+- **"Go to Page / Slide" Jump Dialog**:
+  - Tap the floating status pill to jump straight to any page or slide number instantly.
+- **Native Offline Text-to-Speech (Read Aloud)**:
+  - 100% offline, zero-network reading assistant using Android system TTS with play/stop toggle for Word, EPUB, Text, Markdown, and Code.
+- **Universal Print & Save as Clean PDF**:
+  - One-tap print or clean PDF export using Android's native `PrintManager` for all supported formats.
+- **Adaptive Reading Themes & Eye-Care Tints**:
+  - Quick cycle: Clean Light, **Warm Sepia** (eye-care reading tint), **Slate Dark**, and **Pure AMOLED Black** (battery-saving OLED mode).
 - **In-Document Search**:
   - Real-time text search with match highlighting, match counter, and Up/Down navigation.
 - **Dynamic Text Sizing**:

@@ -50,6 +50,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
+import android.content.Context
+import android.os.CancellationSignal
+import android.print.PageRange
+import android.print.PrintAttributes
+import android.print.PrintDocumentAdapter
+import android.print.PrintDocumentInfo
+import android.print.PrintManager
+import android.speech.tts.TextToSpeech
+import android.text.InputType
+import android.widget.EditText
+import androidx.appcompat.app.AlertDialog
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -78,6 +90,14 @@ class ViewerActivity : AppCompatActivity() {
 
     // Text sizing
     private var baseTextSizeSp = 15f
+
+    // Page jump & navigation state
+    private var totalDocumentPages = 1
+    private var currentActivePage = 1
+
+    // Text-to-Speech state
+    private var textToSpeech: TextToSpeech? = null
+    private var isTtsSpeaking = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -108,8 +128,27 @@ class ViewerActivity : AppCompatActivity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        if (isTtsSpeaking) {
+            textToSpeech?.stop()
+            isTtsSpeaking = false
+            binding.btnReadAloud.setImageResource(R.drawable.ic_volume_up)
+        }
+        documentUri?.let { uri ->
+            if (binding.epubWebView.visibility == View.VISIBLE) {
+                app.prefs.saveDocumentScrollY(uri.toString(), binding.epubWebView.scrollY)
+            } else if (binding.textScrollView.visibility == View.VISIBLE) {
+                app.prefs.saveDocumentScrollY(uri.toString(), binding.textScrollView.scrollY)
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
         closePdfRenderer()
         try {
             binding.epubWebView.clearCache(true)
@@ -292,6 +331,9 @@ class ViewerActivity : AppCompatActivity() {
         fun onSlideVisible(current: Int, total: Int) {
             runOnUiThread {
                 binding.statusPillCard.visibility = View.VISIBLE
+                currentActivePage = current
+                totalDocumentPages = total
+                documentUri?.let { app.prefs.saveDocumentPosition(it.toString(), current) }
                 if (documentType == DocumentType.PPT) {
                     binding.txtStatusPill.text = "Slide $current of $total"
                 } else {
@@ -362,6 +404,19 @@ class ViewerActivity : AppCompatActivity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     binding.loadingLayout.visibility = View.GONE
+
+                    documentUri?.let { uri ->
+                        val savedY = app.prefs.getDocumentScrollY(uri.toString())
+                        if (savedY > 0) {
+                            view?.postDelayed({
+                                view.scrollTo(0, savedY)
+                            }, 350)
+                        }
+                    }
+
+                    if (app.prefs.themeMode != 1) {
+                        applyWebViewTheme(app.prefs.themeMode)
+                    }
 
                     val trackingJs = """
                         (function() {
@@ -457,6 +512,21 @@ class ViewerActivity : AppCompatActivity() {
         // Toggle Theme Mode
         binding.btnToggleTheme.setOnClickListener {
             toggleReadingTheme()
+        }
+
+        // Read Aloud (Offline TTS)
+        binding.btnReadAloud.setOnClickListener {
+            toggleReadAloud()
+        }
+
+        // Print & Save as Clean PDF
+        binding.btnPrint.setOnClickListener {
+            printOrSaveAsPdf()
+        }
+
+        // Quick Page Jump
+        binding.statusPillCard.setOnClickListener {
+            showJumpToPageDialog()
         }
 
         // Share File
@@ -602,7 +672,18 @@ class ViewerActivity : AppCompatActivity() {
                 binding.pdfRecyclerView.layoutManager = layoutManager
                 binding.pdfRecyclerView.adapter = adapter
 
-                binding.txtStatusPill.text = getString(R.string.page_counter, 1, renderer.pageCount)
+                totalDocumentPages = renderer.pageCount
+                val savedPage = documentUri?.let { app.prefs.getDocumentPosition(it.toString()) } ?: 1
+                currentActivePage = if (savedPage in 1..renderer.pageCount) savedPage else 1
+
+                binding.txtStatusPill.text = getString(R.string.page_counter, currentActivePage, renderer.pageCount)
+
+                if (currentActivePage > 1) {
+                    binding.pdfRecyclerView.post {
+                        layoutManager.scrollToPositionWithOffset(currentActivePage - 1, 0)
+                    }
+                    Toast.makeText(this@ViewerActivity, "Resumed at page $currentActivePage", Toast.LENGTH_SHORT).show()
+                }
 
                 binding.pdfRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
                     override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
@@ -642,7 +723,10 @@ class ViewerActivity : AppCompatActivity() {
                             }
                         }
 
+                        currentActivePage = activePage
+                        totalDocumentPages = totalPages
                         binding.txtStatusPill.text = getString(R.string.page_counter, activePage, totalPages)
+                        documentUri?.let { app.prefs.saveDocumentPosition(it.toString(), activePage) }
                     }
                 })
             }
@@ -805,6 +889,13 @@ class ViewerActivity : AppCompatActivity() {
         val words = ssb.split(Regex("\\s+")).count { it.isNotBlank() }
         val readTimeMinutes = (words / 200).coerceAtLeast(1)
         binding.txtStatusPill.text = getString(R.string.word_count, words, "$readTimeMinutes min")
+
+        val savedY = documentUri?.let { app.prefs.getDocumentScrollY(it.toString()) } ?: 0
+        if (savedY > 0) {
+            binding.textScrollView.post {
+                binding.textScrollView.scrollTo(0, savedY)
+            }
+        }
     }
 
     // =========================================================================
@@ -970,36 +1061,319 @@ class ViewerActivity : AppCompatActivity() {
     }
 
     private fun toggleReadingTheme() {
-        // Toggle background between White, Soft Sepia, and AMOLED Black
-        when (app.prefs.themeMode) {
-            0, 1 -> { // Switch to Sepia
-                app.prefs.themeMode = 4
+        // 4-stage eye-care reading tint cycle: Light (1) -> Sepia (2) -> Slate Dark (3) -> AMOLED Black (4) -> Light (1)
+        val nextMode = when (app.prefs.themeMode) {
+            1 -> 2
+            2 -> 3
+            3 -> 4
+            else -> 1
+        }
+        app.prefs.themeMode = nextMode
+        applyReadingTheme(nextMode)
+    }
+
+    private fun applyReadingTheme(mode: Int) {
+        when (mode) {
+            2 -> { // Warm Sepia (Eye-Care Tint)
                 binding.viewerRootLayout.setBackgroundColor(Color.parseColor("#FBF0D9"))
-                binding.contentTextView.setTextColor(Color.parseColor("#5F4B32"))
-                applyWebViewNightMode(false)
+                binding.contentTextView.setTextColor(Color.parseColor("#433422"))
+                applyWebViewTheme(mode)
+                Toast.makeText(this, "Warm Sepia (Eye-Care)", Toast.LENGTH_SHORT).show()
             }
-            4 -> { // Switch to AMOLED Black
-                app.prefs.themeMode = 3
+            3 -> { // Slate Dark
+                binding.viewerRootLayout.setBackgroundColor(Color.parseColor("#0F172A"))
+                binding.contentTextView.setTextColor(Color.parseColor("#E2E8F0"))
+                applyWebViewTheme(mode)
+                Toast.makeText(this, "Slate Dark", Toast.LENGTH_SHORT).show()
+            }
+            4 -> { // AMOLED Black
                 binding.viewerRootLayout.setBackgroundColor(Color.parseColor("#000000"))
                 binding.contentTextView.setTextColor(Color.parseColor("#E2E8F0"))
-                applyWebViewNightMode(true)
+                applyWebViewTheme(mode)
+                Toast.makeText(this, "AMOLED Black", Toast.LENGTH_SHORT).show()
             }
-            else -> { // Switch to Default
-                app.prefs.themeMode = 1
+            else -> { // Clean Light (1)
                 binding.viewerRootLayout.setBackgroundColor(ContextCompat.getColor(this, R.color.background_light))
                 binding.contentTextView.setTextColor(ContextCompat.getColor(this, R.color.text_primary_light))
-                applyWebViewNightMode(false)
+                applyWebViewTheme(mode)
+                Toast.makeText(this, "Clean Light", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    private fun applyWebViewNightMode(isNight: Boolean) {
+    private fun applyWebViewTheme(mode: Int) {
         if (binding.epubWebView.visibility == View.VISIBLE) {
+            val isDark = mode in listOf(3, 4)
             if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
-                val forceDark = if (isNight) WebSettingsCompat.FORCE_DARK_ON else WebSettingsCompat.FORCE_DARK_OFF
+                val forceDark = if (isDark) WebSettingsCompat.FORCE_DARK_ON else WebSettingsCompat.FORCE_DARK_OFF
                 WebSettingsCompat.setForceDark(binding.epubWebView.settings, forceDark)
             }
-            binding.epubWebView.evaluateJavascript("if (typeof vwSetNight === 'function') vwSetNight($isNight);", null)
+            val js = when (mode) {
+                2 -> """
+                    (function() {
+                        var style = document.getElementById('dq-theme-override') || document.createElement('style');
+                        style.id = 'dq-theme-override';
+                        style.textContent = 'html, body { background-color: #FBF0D9 !important; color: #433422 !important; } * { color: #433422 !important; }';
+                        if (!style.parentNode) document.head.appendChild(style);
+                        if (typeof vwSetNight === 'function') vwSetNight(false);
+                    })();
+                """.trimIndent()
+                3 -> """
+                    (function() {
+                        var style = document.getElementById('dq-theme-override') || document.createElement('style');
+                        style.id = 'dq-theme-override';
+                        style.textContent = 'html, body { background-color: #0F172A !important; color: #E2E8F0 !important; }';
+                        if (!style.parentNode) document.head.appendChild(style);
+                        if (typeof vwSetNight === 'function') vwSetNight(true);
+                    })();
+                """.trimIndent()
+                4 -> """
+                    (function() {
+                        var style = document.getElementById('dq-theme-override') || document.createElement('style');
+                        style.id = 'dq-theme-override';
+                        style.textContent = 'html, body { background-color: #000000 !important; color: #E2E8F0 !important; }';
+                        if (!style.parentNode) document.head.appendChild(style);
+                        if (typeof vwSetNight === 'function') vwSetNight(true);
+                    })();
+                """.trimIndent()
+                else -> """
+                    (function() {
+                        var style = document.getElementById('dq-theme-override');
+                        if (style) style.remove();
+                        if (typeof vwSetNight === 'function') vwSetNight(false);
+                    })();
+                """.trimIndent()
+            }
+            binding.epubWebView.evaluateJavascript(js, null)
+        }
+    }
+
+    // =========================================================================
+    // Jump to Page / Slide Dialog
+    // =========================================================================
+    private fun showJumpToPageDialog() {
+        if (totalDocumentPages <= 1 && binding.textScrollView.visibility != View.VISIBLE) {
+            Toast.makeText(this, "Single page document", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (binding.textScrollView.visibility == View.VISIBLE) {
+            AlertDialog.Builder(this)
+                .setTitle("Quick Scroll")
+                .setItems(arrayOf("Scroll to Top", "Scroll to Middle", "Scroll to Bottom")) { _, which ->
+                    when (which) {
+                        0 -> binding.textScrollView.smoothScrollTo(0, 0)
+                        1 -> binding.textScrollView.smoothScrollTo(0, binding.contentTextView.height / 2)
+                        2 -> binding.textScrollView.smoothScrollTo(0, binding.contentTextView.height)
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return
+        }
+
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            hint = "1 - $totalDocumentPages"
+            setText(currentActivePage.toString())
+            selectAll()
+            setPadding(50, 40, 50, 40)
+        }
+
+        val title = if (documentType == DocumentType.PPT) "Jump to Slide" else "Jump to Page"
+
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage("Enter number (1 to $totalDocumentPages):")
+            .setView(input)
+            .setPositiveButton("Go") { _, _ ->
+                val pageNum = input.text.toString().toIntOrNull()
+                if (pageNum != null && pageNum in 1..totalDocumentPages) {
+                    currentActivePage = pageNum
+                    if (binding.pdfRecyclerView.visibility == View.VISIBLE) {
+                        (binding.pdfRecyclerView.layoutManager as? LinearLayoutManager)
+                            ?.scrollToPositionWithOffset(pageNum - 1, 0)
+                        binding.txtStatusPill.text = getString(R.string.page_counter, pageNum, totalDocumentPages)
+                    } else if (binding.epubWebView.visibility == View.VISIBLE) {
+                        val jumpJs = """
+                            (function() {
+                                var slides = document.querySelectorAll('#result .slide, #pages .pg');
+                                if (slides && slides.length >= $pageNum) {
+                                    slides[${pageNum - 1}].scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                } else {
+                                    var targetY = (document.documentElement.scrollHeight / $totalDocumentPages) * (${pageNum - 1});
+                                    window.scrollTo({ top: targetY, behavior: 'smooth' });
+                                }
+                            })();
+                        """.trimIndent()
+                        binding.epubWebView.evaluateJavascript(jumpJs, null)
+                    }
+                } else {
+                    Toast.makeText(this, "Invalid page number (1 - $totalDocumentPages)", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    // =========================================================================
+    // Native Offline Text-to-Speech (Read Aloud)
+    // =========================================================================
+    private fun initTtsIfNeeded(onReady: () -> Unit) {
+        if (textToSpeech == null) {
+            textToSpeech = TextToSpeech(applicationContext) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    textToSpeech?.language = Locale.getDefault()
+                    onReady()
+                } else {
+                    Toast.makeText(this, "Text-to-Speech not available on device", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else {
+            onReady()
+        }
+    }
+
+    private fun toggleReadAloud() {
+        if (isTtsSpeaking) {
+            stopReadAloud()
+            return
+        }
+
+        initTtsIfNeeded {
+            if (binding.contentTextView.visibility == View.VISIBLE) {
+                val text = binding.contentTextView.text?.toString() ?: ""
+                if (text.isNotBlank()) {
+                    startSpeaking(text)
+                } else {
+                    Toast.makeText(this, "No text to read", Toast.LENGTH_SHORT).show()
+                }
+            } else if (binding.epubWebView.visibility == View.VISIBLE) {
+                binding.epubWebView.evaluateJavascript("(function(){ return document.body.innerText || ''; })();") { raw ->
+                    val text = unescapeJsString(raw)
+                    if (text.isNotBlank()) {
+                        runOnUiThread { startSpeaking(text) }
+                    } else {
+                        runOnUiThread { Toast.makeText(this, "No text found to read", Toast.LENGTH_SHORT).show() }
+                    }
+                }
+            } else {
+                Toast.makeText(this, "Read aloud is available for Word, EPUB, Text, Markdown and Code", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun startSpeaking(text: String) {
+        val clean = text.replace(Regex("\\s+"), " ").trim()
+        if (clean.isEmpty()) return
+
+        isTtsSpeaking = true
+        binding.btnReadAloud.setImageResource(R.drawable.ic_volume_off)
+        Toast.makeText(this, "Reading aloud...", Toast.LENGTH_SHORT).show()
+
+        val chunks = clean.chunked(3000)
+        var isFirst = true
+        for (chunk in chunks) {
+            val queueMode = if (isFirst) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            textToSpeech?.speak(chunk, queueMode, null, "DocuQuickTTS")
+            isFirst = false
+        }
+
+        textToSpeech?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) {
+                runOnUiThread { stopReadAloud() }
+            }
+            override fun onError(utteranceId: String?) {
+                runOnUiThread { stopReadAloud() }
+            }
+        })
+    }
+
+    private fun stopReadAloud() {
+        textToSpeech?.stop()
+        isTtsSpeaking = false
+        binding.btnReadAloud.setImageResource(R.drawable.ic_volume_up)
+    }
+
+    private fun unescapeJsString(raw: String?): String {
+        if (raw.isNullOrBlank() || raw == "null" || raw == "\"\"") return ""
+        return try {
+            org.json.JSONTokener(raw).nextValue().toString()
+        } catch (e: Exception) {
+            raw.removeSurrounding("\"")
+        }
+    }
+
+    // =========================================================================
+    // Universal Print & Save as Clean PDF
+    // =========================================================================
+    private fun printOrSaveAsPdf() {
+        val printManager = getSystemService(Context.PRINT_SERVICE) as? PrintManager
+        if (printManager == null) {
+            Toast.makeText(this, "Printing service unavailable", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val jobName = "DocuQuick - ${documentName.ifBlank { "Document" }}"
+
+        if (binding.epubWebView.visibility == View.VISIBLE) {
+            val printAdapter = binding.epubWebView.createPrintDocumentAdapter(jobName)
+            printManager.print(jobName, printAdapter, PrintAttributes.Builder().build())
+        } else if (tempPdfFile != null && tempPdfFile!!.exists()) {
+            val fileToPrint = tempPdfFile!!
+            val printAdapter = object : PrintDocumentAdapter() {
+                override fun onLayout(
+                    oldAttributes: PrintAttributes?,
+                    newAttributes: PrintAttributes?,
+                    cancellationSignal: CancellationSignal?,
+                    callback: LayoutResultCallback?,
+                    extras: Bundle?
+                ) {
+                    if (cancellationSignal?.isCanceled == true) {
+                        callback?.onLayoutCancelled()
+                        return
+                    }
+                    val pdi = PrintDocumentInfo.Builder(jobName)
+                        .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                        .setPageCount(totalDocumentPages)
+                        .build()
+                    callback?.onLayoutFinished(pdi, true)
+                }
+
+                override fun onWrite(
+                    pages: Array<out PageRange>?,
+                    destination: ParcelFileDescriptor?,
+                    cancellationSignal: CancellationSignal?,
+                    callback: WriteResultCallback?
+                ) {
+                    try {
+                        val input = FileInputStream(fileToPrint)
+                        val output = FileOutputStream(destination?.fileDescriptor)
+                        input.copyTo(output)
+                        input.close()
+                        output.close()
+                        callback?.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
+                    } catch (e: Exception) {
+                        callback?.onWriteFailed(e.message)
+                    }
+                }
+            }
+            printManager.print(jobName, printAdapter, PrintAttributes.Builder().build())
+        } else if (binding.contentTextView.visibility == View.VISIBLE) {
+            val htmlContent = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1.0'><style>body { font-family: sans-serif; padding: 16px; font-size: 14px; line-height: 1.6; color: #000; }</style></head><body><pre style='white-space: pre-wrap; word-wrap: break-word;'>" +
+                    android.text.TextUtils.htmlEncode(binding.contentTextView.text.toString()) +
+                    "</pre></body></html>"
+            val tempWebView = WebView(this)
+            tempWebView.webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    val printAdapter = tempWebView.createPrintDocumentAdapter(jobName)
+                    printManager.print(jobName, printAdapter, PrintAttributes.Builder().build())
+                }
+            }
+            tempWebView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
+        } else {
+            Toast.makeText(this, "Printing not supported for this view", Toast.LENGTH_SHORT).show()
         }
     }
 

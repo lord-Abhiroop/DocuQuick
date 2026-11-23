@@ -51,17 +51,35 @@
             <!-- Action Buttons -->
             <ImageButton
                 android:id="@+id/btnSearch"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_search"
                 android:contentDescription="@string/action_search"
                 app:tint="?attr/colorOnSurface" />
 
             <ImageButton
+                android:id="@+id/btnReadAloud"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_volume_up"
+                android:contentDescription="Read Aloud"
+                app:tint="?attr/colorOnSurface" />
+
+            <ImageButton
+                android:id="@+id/btnPrint"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_print"
+                android:contentDescription="Print or Save as PDF"
+                app:tint="?attr/colorOnSurface" />
+
+            <ImageButton
                 android:id="@+id/btnTextSize"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_text_size"
                 android:contentDescription="@string/action_text_size"
@@ -69,8 +87,8 @@
 
             <ImageButton
                 android:id="@+id/btnToggleTheme"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_theme"
                 android:contentDescription="@string/action_theme_toggle"
@@ -78,8 +96,8 @@
 
             <ImageButton
                 android:id="@+id/btnShare"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_share"
                 android:contentDescription="@string/action_share"
@@ -322,13 +340,16 @@
 
         </LinearLayout>
 
-        <!-- Floating Status / Page Indicator Pill -->
+        <!-- Floating Status / Page Indicator Pill (Tap to Jump) -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/statusPillCard"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|center_horizontal"
             android:layout_marginBottom="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
             app:cardCornerRadius="16dp"
             app:cardElevation="4dp"
             app:cardBackgroundColor="?attr/colorSurface"
