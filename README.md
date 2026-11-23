@@ -44,6 +44,9 @@
 - **Universal Android Integration**:
   - Registered intent filters for all document MIME types and extensions.
   - Seamlessly handles *"Open with..."* and *"Share to..."* from WhatsApp, Telegram, Gmail, Chrome, and Android Files.
+- **In-App Split-Screen Document Compare**:
+  - Compare any two documents side-by-side or top/bottom simultaneously (PDF vs PDF, Word vs PDF, Excel vs Word, etc.).
+  - 1-tap quick selection from recents or browse files, with live swap (`⇅`) and independent zoom/scrolling.
 - **Reading Position Memory (Auto-Resume)**:
   - Automatically remembers and restores your exact reading page (PDF) and scroll position (Word, Markdown, EPUB, Code, Text) across app launches.
 - **"Go to Page / Slide" Jump Dialog**:

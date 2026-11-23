@@ -149,7 +149,10 @@ class ZoomableLayout @JvmOverloads constructor(
         return v.id == com.docuquick.app.R.id.pdfRecyclerView ||
                v.id == com.docuquick.app.R.id.textScrollView ||
                v.id == com.docuquick.app.R.id.tableHorizontalScrollView ||
-               v.id == com.docuquick.app.R.id.docImageView
+               v.id == com.docuquick.app.R.id.docImageView ||
+               v.id == com.docuquick.app.R.id.splitPdfRecyclerView ||
+               v.id == com.docuquick.app.R.id.splitTextScrollView ||
+               v.id == com.docuquick.app.R.id.splitDocImageView
     }
 
     fun animateZoom(targetScale: Float, focusX: Float, focusY: Float) {

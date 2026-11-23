@@ -43,7 +43,9 @@ import com.docuquick.app.parser.ExcelParser
 import com.docuquick.app.parser.MarkdownParser
 import com.docuquick.app.parser.PptxParser
 import com.docuquick.app.parser.SheetData
+import androidx.activity.result.contract.ActivityResultContracts
 import com.docuquick.app.ui.PdfAdapter
+import com.docuquick.app.ui.RecentFilesAdapter
 import com.docuquick.app.util.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -100,6 +102,23 @@ class ViewerActivity : AppCompatActivity() {
     // Text-to-Speech state
     private var textToSpeech: TextToSpeech? = null
     private var isTtsSpeaking = false
+
+    // Split Screen Compare state
+    private var isSplitScreenActive = false
+    private var secondaryDocUri: Uri? = null
+    private var secondaryDocName = ""
+    private var secondaryDocType = DocumentType.UNKNOWN
+    private var secondaryPdfRenderer: PdfRenderer? = null
+    private var secondaryPdfFileDescriptor: ParcelFileDescriptor? = null
+    private var secondaryTempPdfFile: File? = null
+
+    private val openSecondaryDocLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            loadSecondaryDocument(it)
+        }
+    }
 
     // Status Pill auto-hide handler (pops for 1.8s, then smoothly disappears)
     private val statusPillHandler = Handler(Looper.getMainLooper())
@@ -176,6 +195,11 @@ class ViewerActivity : AppCompatActivity() {
         textToSpeech?.shutdown()
         textToSpeech = null
         closePdfRenderer()
+        closeSecondaryPdfRenderer()
+        try {
+            binding.splitEpubWebView.clearCache(true)
+            binding.splitEpubWebView.destroy()
+        } catch (ignored: Exception) {}
         try {
             binding.epubWebView.clearCache(true)
             binding.epubWebView.destroy()
@@ -261,74 +285,84 @@ class ViewerActivity : AppCompatActivity() {
         }
     }
 
+    private fun createDocPathHandler(
+        getUri: () -> Uri?,
+        getName: () -> String,
+        getTempPdf: () -> File?
+    ): WebViewAssetLoader.PathHandler {
+        return object : WebViewAssetLoader.PathHandler {
+            override fun handle(path: String): WebResourceResponse? {
+                val uri = getUri() ?: return null
+                return try {
+                    val cleanPath = path.substringBefore('?').lowercase()
+                    val ext = cleanPath.substringAfterLast('.', "").ifEmpty {
+                        getName().substringAfterLast('.', "").lowercase()
+                    }
+                    val temp = getTempPdf()
+                    val stream = if (temp?.exists() == true && (ext == "pdf" || cleanPath.endsWith(".pdf"))) {
+                        FileInputStream(temp)
+                    } else {
+                        contentResolver.openInputStream(uri)
+                    } ?: return null
+                    val mime = when (ext) {
+                        "pdf" ->
+                            "application/pdf"
+                        "pptx", "ppsx", "pptm", "potx" ->
+                            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                        "ppt", "pps", "pot" ->
+                            "application/vnd.ms-powerpoint"
+                        "docx", "docm", "dotx" ->
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        "doc", "dot" ->
+                            "application/msword"
+                        "xlsx", "xlsm", "xlsb", "xltx" ->
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        "xls" ->
+                            "application/vnd.ms-excel"
+                        "csv" ->
+                            "text/csv"
+                        "tsv" ->
+                            "text/tab-separated-values"
+                        "odt", "ott", "fodt" ->
+                            "application/vnd.oasis.opendocument.text"
+                        "ods" ->
+                            "application/vnd.oasis.opendocument.spreadsheet"
+                        "rtf" ->
+                            "application/rtf"
+                        "epub" ->
+                            "application/epub+zip"
+                        "md", "markdown" ->
+                            "text/markdown"
+                        "txt", "log" ->
+                            "text/plain"
+                        "json" ->
+                            "application/json"
+                        "xml" ->
+                            "application/xml"
+                        else -> contentResolver.getType(uri) ?: "application/octet-stream"
+                    }
+                    val encoding = if (mime.startsWith("text/") || mime == "application/json" || mime == "application/xml") "UTF-8" else null
+                    val headers = mapOf(
+                        "Access-Control-Allow-Origin" to "*",
+                        "Access-Control-Allow-Methods" to "GET, OPTIONS",
+                        "Access-Control-Allow-Headers" to "*",
+                        "X-Gander-Encoding" to "UTF-8"
+                    )
+                    WebResourceResponse(mime, encoding, 200, "OK", headers, stream)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    null
+                }
+            }
+        }
+    }
+
     private val assetLoader by lazy {
         WebViewAssetLoader.Builder()
             .setDomain("appassets.androidplatform.net")
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
-            .addPathHandler("/doc/", object : WebViewAssetLoader.PathHandler {
-                override fun handle(path: String): WebResourceResponse? {
-                    val uri = documentUri ?: return null
-                    return try {
-                        val cleanPath = path.substringBefore('?').lowercase()
-                        val ext = cleanPath.substringAfterLast('.', "").ifEmpty {
-                            documentName.substringAfterLast('.', "").lowercase()
-                        }
-                        val stream = if (tempPdfFile?.exists() == true && (ext == "pdf" || cleanPath.endsWith(".pdf"))) {
-                            FileInputStream(tempPdfFile)
-                        } else {
-                            contentResolver.openInputStream(uri)
-                        } ?: return null
-                        val mime = when (ext) {
-                            "pdf" ->
-                                "application/pdf"
-                            "pptx", "ppsx", "pptm", "potx" ->
-                                "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                            "ppt", "pps", "pot" ->
-                                "application/vnd.ms-powerpoint"
-                            "docx", "docm", "dotx" ->
-                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            "doc", "dot" ->
-                                "application/msword"
-                            "xlsx", "xlsm", "xlsb", "xltx" ->
-                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            "xls" ->
-                                "application/vnd.ms-excel"
-                            "csv" ->
-                                "text/csv"
-                            "tsv" ->
-                                "text/tab-separated-values"
-                            "odt", "ott", "fodt" ->
-                                "application/vnd.oasis.opendocument.text"
-                            "ods" ->
-                                "application/vnd.oasis.opendocument.spreadsheet"
-                            "rtf" ->
-                                "application/rtf"
-                            "epub" ->
-                                "application/epub+zip"
-                            "md", "markdown" ->
-                                "text/markdown"
-                            "txt", "log" ->
-                                "text/plain"
-                            "json" ->
-                                "application/json"
-                            "xml" ->
-                                "application/xml"
-                            else -> contentResolver.getType(uri) ?: "application/octet-stream"
-                        }
-                        val encoding = if (mime.startsWith("text/") || mime == "application/json" || mime == "application/xml") "UTF-8" else null
-                        val headers = mapOf(
-                            "Access-Control-Allow-Origin" to "*",
-                            "Access-Control-Allow-Methods" to "GET, OPTIONS",
-                            "Access-Control-Allow-Headers" to "*",
-                            "X-Gander-Encoding" to "UTF-8"
-                        )
-                        WebResourceResponse(mime, encoding, 200, "OK", headers, stream)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        null
-                    }
-                }
-            })
+            .addPathHandler("/doc/", createDocPathHandler({ documentUri }, { documentName }, { tempPdfFile }))
+            .addPathHandler("/splitdoc/", createDocPathHandler({ secondaryDocUri }, { secondaryDocName }, { secondaryTempPdfFile }))
             .build()
     }
 
@@ -549,6 +583,27 @@ class ViewerActivity : AppCompatActivity() {
             printOrSaveAsPdf()
         }
 
+        // Split Screen Compare
+        binding.btnSplitScreen.setOnClickListener {
+            toggleSplitScreen()
+        }
+
+        binding.btnSplitClose.setOnClickListener {
+            closeSplitScreen()
+        }
+
+        binding.btnSplitSwap.setOnClickListener {
+            swapSplitPanes()
+        }
+
+        binding.btnSplitChangeDoc.setOnClickListener {
+            showSecondaryDocumentPicker()
+        }
+
+        binding.btnSplitBrowse.setOnClickListener {
+            openSecondaryDocLauncher.launch(arrayOf("*/*"))
+        }
+
         // Quick Page Jump
         binding.statusPillCard.setOnClickListener {
             showJumpToPageDialog()
@@ -574,6 +629,27 @@ class ViewerActivity : AppCompatActivity() {
     }
 
     private fun loadDocument(uri: Uri) {
+        closePdfRenderer()
+        documentUri = uri
+        val (name, size) = FileUtils.getFileMetadata(this, uri)
+        documentName = name
+        documentSizeBytes = size
+
+        val mime = try { contentResolver.getType(uri) } catch (e: Exception) { null }
+        var type = DocumentType.fromFileNameAndMime(name, mime)
+        if (type == DocumentType.UNKNOWN) {
+            try {
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    type = DocumentType.detectFromStream(stream)
+                }
+            } catch (ignored: Exception) {}
+        }
+        documentType = type
+
+        binding.txtDocTitle.text = documentName
+        val sizeStr = FileUtils.formatFileSize(documentSizeBytes)
+        binding.txtDocSubtitle.text = "${documentType.categoryName} • $sizeStr"
+
         binding.loadingLayout.visibility = View.VISIBLE
         hideAllContentViews()
 
@@ -1112,24 +1188,28 @@ class ViewerActivity : AppCompatActivity() {
             2 -> { // Warm Sepia (Eye-Care Tint)
                 binding.viewerRootLayout.setBackgroundColor(Color.parseColor("#FBF0D9"))
                 binding.contentTextView.setTextColor(Color.parseColor("#433422"))
+                binding.splitContentTextView.setTextColor(Color.parseColor("#433422"))
                 applyWebViewTheme(mode)
                 Toast.makeText(this, "Warm Sepia (Eye-Care)", Toast.LENGTH_SHORT).show()
             }
             3 -> { // Slate Dark
                 binding.viewerRootLayout.setBackgroundColor(Color.parseColor("#0F172A"))
                 binding.contentTextView.setTextColor(Color.parseColor("#E2E8F0"))
+                binding.splitContentTextView.setTextColor(Color.parseColor("#E2E8F0"))
                 applyWebViewTheme(mode)
                 Toast.makeText(this, "Slate Dark", Toast.LENGTH_SHORT).show()
             }
             4 -> { // AMOLED Black
                 binding.viewerRootLayout.setBackgroundColor(Color.parseColor("#000000"))
                 binding.contentTextView.setTextColor(Color.parseColor("#E2E8F0"))
+                binding.splitContentTextView.setTextColor(Color.parseColor("#E2E8F0"))
                 applyWebViewTheme(mode)
                 Toast.makeText(this, "AMOLED Black", Toast.LENGTH_SHORT).show()
             }
             else -> { // Clean Light (1)
                 binding.viewerRootLayout.setBackgroundColor(ContextCompat.getColor(this, R.color.background_light))
                 binding.contentTextView.setTextColor(ContextCompat.getColor(this, R.color.text_primary_light))
+                binding.splitContentTextView.setTextColor(ContextCompat.getColor(this, R.color.text_primary_light))
                 applyWebViewTheme(mode)
                 Toast.makeText(this, "Clean Light", Toast.LENGTH_SHORT).show()
             }
@@ -1469,5 +1549,215 @@ class ViewerActivity : AppCompatActivity() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    // =========================================================================
+    // In-App Split-Screen Comparison
+    // =========================================================================
+    private fun toggleSplitScreen() {
+        if (isSplitScreenActive) {
+            closeSplitScreen()
+        } else {
+            openSplitScreen()
+        }
+    }
+
+    private fun openSplitScreen() {
+        isSplitScreenActive = true
+        binding.splitDividerLayout.visibility = View.VISIBLE
+        binding.secondaryPaneContainer.visibility = View.VISIBLE
+        binding.btnSplitScreen.alpha = 0.5f
+
+        if (secondaryDocUri == null) {
+            showSecondaryDocumentPicker()
+        } else {
+            binding.splitEmptyLayout.visibility = View.GONE
+            binding.splitContentContainer.visibility = View.VISIBLE
+        }
+    }
+
+    private fun closeSplitScreen() {
+        isSplitScreenActive = false
+        binding.splitDividerLayout.visibility = View.GONE
+        binding.secondaryPaneContainer.visibility = View.GONE
+        binding.btnSplitScreen.alpha = 1.0f
+        closeSecondaryPdfRenderer()
+    }
+
+    private fun showSecondaryDocumentPicker() {
+        binding.splitContentContainer.visibility = View.GONE
+        binding.splitEmptyLayout.visibility = View.VISIBLE
+        binding.txtSplitSecondDocTitle.text = "Choose Document to Compare"
+
+        val allRecent = app.prefs.getRecentFiles()
+        val validRecents = allRecent.filter {
+            val u = Uri.parse(it.uriString)
+            it.uriString != documentUri?.toString() && FileUtils.isUriAccessible(this, u)
+        }
+
+        val adapter = RecentFilesAdapter { recent ->
+            loadSecondaryDocument(Uri.parse(recent.uriString))
+        }
+        binding.splitRecentsRecyclerView.layoutManager = LinearLayoutManager(this)
+        binding.splitRecentsRecyclerView.adapter = adapter
+        adapter.setFiles(validRecents)
+    }
+
+    private fun swapSplitPanes() {
+        val uri1 = documentUri
+        val uri2 = secondaryDocUri
+        if (uri1 != null && uri2 != null) {
+            loadDocument(uri2)
+            loadSecondaryDocument(uri1)
+            Toast.makeText(this, "Panes Swapped", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Select a secondary document first", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun loadSecondaryDocument(uri: Uri) {
+        closeSecondaryPdfRenderer()
+        secondaryDocUri = uri
+        val (name, _) = FileUtils.getFileMetadata(this, uri)
+        secondaryDocName = name
+
+        val mime = try { contentResolver.getType(uri) } catch (e: Exception) { null }
+        var type = DocumentType.fromFileNameAndMime(name, mime)
+        if (type == DocumentType.UNKNOWN) {
+            try {
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    type = DocumentType.detectFromStream(stream)
+                }
+            } catch (ignored: Exception) {}
+        }
+        secondaryDocType = type
+
+        binding.splitEmptyLayout.visibility = View.GONE
+        binding.splitContentContainer.visibility = View.VISIBLE
+        binding.txtSplitSecondDocTitle.text = secondaryDocName
+
+        binding.splitPdfRecyclerView.visibility = View.GONE
+        binding.splitTextScrollView.visibility = View.GONE
+        binding.splitEpubWebView.visibility = View.GONE
+        binding.splitDocImageView.visibility = View.GONE
+        binding.splitProgressBar.visibility = View.VISIBLE
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                when (secondaryDocType) {
+                    DocumentType.PDF -> loadSecondaryPdf(uri)
+                    DocumentType.IMAGE -> loadSecondaryImage(uri)
+                    else -> loadSecondaryWebDoc(uri, secondaryDocType)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.splitProgressBar.visibility = View.GONE
+                    Toast.makeText(this@ViewerActivity, "Unable to load comparison document: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private suspend fun loadSecondaryPdf(uri: Uri) {
+        val temp = FileUtils.copyUriToTempFile(this@ViewerActivity, uri, "split_pdf_", ".pdf")
+        secondaryTempPdfFile = temp
+        val pfd = ParcelFileDescriptor.open(temp, ParcelFileDescriptor.MODE_READ_ONLY)
+        secondaryPdfFileDescriptor = pfd
+        val renderer = PdfRenderer(pfd)
+        secondaryPdfRenderer = renderer
+
+        withContext(Dispatchers.Main) {
+            binding.splitProgressBar.visibility = View.GONE
+            binding.splitPdfRecyclerView.visibility = View.VISIBLE
+            val adapter = PdfAdapter(renderer, lifecycleScope)
+            binding.splitPdfRecyclerView.layoutManager = LinearLayoutManager(this@ViewerActivity)
+            binding.splitPdfRecyclerView.adapter = adapter
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private suspend fun loadSecondaryWebDoc(uri: Uri, type: DocumentType) {
+        val isDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES || app.prefs.themeMode in listOf(2, 3)
+        val nightParam = if (isDark) "1" else "0"
+        val textScaleParam = (app.prefs.textSizeScale * 100).toInt()
+
+        val (pageHtml, ext) = when (type) {
+            DocumentType.WORD -> "docx.html" to "docx"
+            DocumentType.EXCEL -> "sheet.html" to "xlsx"
+            DocumentType.PPT -> "pptx.html" to "pptx"
+            DocumentType.EPUB -> "epub.html" to "epub"
+            DocumentType.MARKDOWN -> "md.html" to secondaryDocName.substringAfterLast('.', "md").lowercase()
+            DocumentType.CODE, DocumentType.TEXT -> "text.html" to secondaryDocName.substringAfterLast('.', "txt").lowercase()
+            else -> "text.html" to "txt"
+        }
+
+        withContext(Dispatchers.Main) {
+            binding.splitProgressBar.visibility = View.GONE
+            binding.splitEpubWebView.visibility = View.VISIBLE
+
+            binding.splitEpubWebView.settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                allowFileAccess = true
+                builtInZoomControls = true
+                displayZoomControls = false
+                useWideViewPort = true
+                loadWithOverviewMode = true
+                setSupportZoom(true)
+            }
+
+            binding.splitEpubWebView.webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                    val path = request.url.path ?: return assetLoader.shouldInterceptRequest(request.url)
+                    if (path.endsWith(".mjs")) {
+                        return try {
+                            val assetPath = path.removePrefix("/assets/")
+                            WebResourceResponse("text/javascript", "UTF-8", assets.open(assetPath))
+                        } catch (e: Exception) {
+                            assetLoader.shouldInterceptRequest(request.url)
+                        }
+                    }
+                    if (path.endsWith(".wasm")) {
+                        return try {
+                            val assetPath = path.removePrefix("/assets/")
+                            WebResourceResponse("application/wasm", null, assets.open(assetPath))
+                        } catch (e: Exception) {
+                            assetLoader.shouldInterceptRequest(request.url)
+                        }
+                    }
+                    return assetLoader.shouldInterceptRequest(request.url)
+                }
+            }
+
+            val encodedName = URLEncoder.encode(secondaryDocName, "UTF-8")
+            val url = "https://appassets.androidplatform.net/assets/viewer/$pageHtml?name=$encodedName&ext=$ext&night=$nightParam&type=$textScaleParam&source=splitdoc"
+            binding.splitEpubWebView.loadUrl(url)
+        }
+    }
+
+    private suspend fun loadSecondaryImage(uri: Uri) {
+        val bitmap = contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream)
+        }
+
+        withContext(Dispatchers.Main) {
+            binding.splitProgressBar.visibility = View.GONE
+            binding.splitDocImageView.visibility = View.VISIBLE
+            bitmap?.let {
+                binding.splitDocImageView.setImageBitmap(it)
+            }
+        }
+    }
+
+    private fun closeSecondaryPdfRenderer() {
+        try {
+            secondaryPdfRenderer?.close()
+            secondaryPdfRenderer = null
+            secondaryPdfFileDescriptor?.close()
+            secondaryPdfFileDescriptor = null
+            secondaryTempPdfFile?.delete()
+            secondaryTempPdfFile = null
+        } catch (ignored: Exception) {}
     }
 }

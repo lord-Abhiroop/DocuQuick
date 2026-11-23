@@ -51,8 +51,9 @@
             <!-- Action Buttons -->
             <ImageButton
                 android:id="@+id/btnSearch"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="2dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_search"
                 android:contentDescription="@string/action_search"
@@ -60,8 +61,9 @@
 
             <ImageButton
                 android:id="@+id/btnReadAloud"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="2dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_volume_up"
                 android:contentDescription="Read Aloud"
@@ -69,17 +71,29 @@
 
             <ImageButton
                 android:id="@+id/btnPrint"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="2dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_print"
                 android:contentDescription="Print or Save as PDF"
                 app:tint="?attr/colorOnSurface" />
 
             <ImageButton
+                android:id="@+id/btnSplitScreen"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="2dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_split_screen"
+                android:contentDescription="Split Screen Compare"
+                app:tint="?attr/colorOnSurface" />
+
+            <ImageButton
                 android:id="@+id/btnTextSize"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="2dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_text_size"
                 android:contentDescription="@string/action_text_size"
@@ -87,8 +101,9 @@
 
             <ImageButton
                 android:id="@+id/btnToggleTheme"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="2dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_theme"
                 android:contentDescription="@string/action_theme_toggle"
@@ -96,8 +111,9 @@
 
             <ImageButton
                 android:id="@+id/btnShare"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="2dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_share"
                 android:contentDescription="@string/action_share"
@@ -172,12 +188,25 @@
 
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- Main Content Presentation Layers with Pinch-to-Zoom -->
-    <com.docuquick.app.ui.ZoomableLayout
-        android:id="@+id/contentContainer"
+    <!-- Main Split-Screen Container -->
+    <LinearLayout
+        android:id="@+id/splitMainContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <!-- Primary Document Pane (Takes 100% when split is off, 50% when split is on) -->
+        <FrameLayout
+            android:id="@+id/primaryPaneContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <com.docuquick.app.ui.ZoomableLayout
+                android:id="@+id/contentContainer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
 
         <!-- 1. PDF Renderer Container -->
         <androidx.recyclerview.widget.RecyclerView
@@ -402,6 +431,186 @@
 
         </com.google.android.material.card.MaterialCardView>
 
-    </com.docuquick.app.ui.ZoomableLayout>
+            </com.docuquick.app.ui.ZoomableLayout>
+
+        </FrameLayout>
+
+        <!-- Split Divider Bar (Visible only during split mode) -->
+        <LinearLayout
+            android:id="@+id/splitDividerLayout"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="12dp"
+            android:paddingEnd="6dp"
+            android:background="?attr/colorSurfaceVariant"
+            android:elevation="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/txtSplitSecondDocTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="sans-serif-medium"
+                android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:singleLine="true"
+                android:ellipsize="middle"
+                android:text="Compare Document" />
+
+            <ImageButton
+                android:id="@+id/btnSplitSwap"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_swap_vert"
+                android:contentDescription="Swap Panes"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <ImageButton
+                android:id="@+id/btnSplitChangeDoc"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_folder_open"
+                android:contentDescription="Choose Document"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <ImageButton
+                android:id="@+id/btnSplitClose"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_close"
+                android:contentDescription="Close Split Screen"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+        </LinearLayout>
+
+        <!-- Secondary Document Pane (Visible only during split mode) -->
+        <FrameLayout
+            android:id="@+id/secondaryPaneContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:visibility="gone">
+
+            <!-- Empty / Selection View for Secondary Pane -->
+            <LinearLayout
+                android:id="@+id/splitEmptyLayout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="20dp"
+                android:background="?android:attr/windowBackground">
+
+                <ImageView
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:src="@drawable/ic_split_screen"
+                    app:tint="?attr/colorOnSurfaceVariant" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Choose Document to Compare"
+                    android:fontFamily="sans-serif-medium"
+                    android:textSize="15sp"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Select from recent documents or browse storage"
+                    android:textSize="12sp"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <!-- Recents List for Quick Selection -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/splitRecentsRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:maxHeight="150dp"
+                    android:clipToPadding="false"
+                    android:nestedScrollingEnabled="false" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSplitBrowse"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Browse Files"
+                    app:icon="@drawable/ic_folder_open" />
+
+            </LinearLayout>
+
+            <!-- Active Content View for Secondary Pane -->
+            <com.docuquick.app.ui.ZoomableLayout
+                android:id="@+id/splitContentContainer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/splitPdfRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="24dp"
+                    android:visibility="gone" />
+
+                <androidx.core.widget.NestedScrollView
+                    android:id="@+id/splitTextScrollView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:fillViewport="true"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/splitContentTextView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif"
+                        android:textSize="14sp"
+                        android:lineSpacingMultiplier="1.4"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textIsSelectable="true" />
+                </androidx.core.widget.NestedScrollView>
+
+                <WebView
+                    android:id="@+id/splitEpubWebView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
+
+                <ImageView
+                    android:id="@+id/splitDocImageView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitCenter"
+                    android:visibility="gone" />
+
+                <ProgressBar
+                    android:id="@+id/splitProgressBar"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_gravity="center"
+                    android:visibility="gone" />
+
+            </com.docuquick.app.ui.ZoomableLayout>
+
+        </FrameLayout>
+
+    </LinearLayout>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

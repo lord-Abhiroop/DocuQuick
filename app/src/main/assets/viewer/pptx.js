@@ -590,8 +590,10 @@ new MutationObserver(function (records, observer) {
 }).observe(document.getElementById("result"), { childList: true });
 
 try {
+  var pptxParams = new URLSearchParams(window.location.search);
+  var pptxDocUrl = pptxParams.get("source") === "splitdoc" ? "/splitdoc/file.pptx" : "/doc/file.pptx";
   $("#result").pptxToHtml({
-    pptxFileUrl: "/doc/file.pptx",
+    pptxFileUrl: pptxDocUrl,
     slideMode: false,
     keyBoardShortCut: false,
     mediaProcess: true

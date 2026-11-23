@@ -281,7 +281,9 @@ var VW_NIGHT_MATRIX = [
 ];
 
 function vwDocUrl() {
-  return "/doc/file" + (vwExt ? "." + vwExt : "");
+  var params = new URLSearchParams(window.location.search);
+  var base = params.get("source") === "splitdoc" ? "/splitdoc/file" : "/doc/file";
+  return base + (vwExt ? "." + vwExt : "");
 }
 
 /*
