@@ -11,8 +11,8 @@ android {
         applicationId = "com.docuquick.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.5.2"
+        versionCode = 9
+        versionName = "1.5.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         resourceConfigurations += listOf("en")
@@ -52,14 +52,23 @@ android {
 
     packaging {
         resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += listOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "META-INF/*.version",
+                "META-INF/proguard/*",
+                "**/*.kotlin_builtins",
+                "DebugProbesKt.bin"
+            )
         }
     }
 }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.appcompat:appcompat:1.7.0") {
+        exclude(group = "androidx.emoji2", module = "emoji2")
+        exclude(group = "androidx.emoji2", module = "emoji2-views-helper")
+    }
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.recyclerview:recyclerview:1.3.2")

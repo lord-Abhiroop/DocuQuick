@@ -21,3 +21,7 @@
     public <init>(android.content.Context, android.util.AttributeSet);
     public <init>(android.content.Context, android.util.AttributeSet, int);
 }
+
+# Aggressive inlining and class repackaging for maximum bytecode compression
+-allowaccessmodification
+-repackageclasses ""
