@@ -1452,6 +1452,80 @@ vwFetchDoc("buffer")
           moreEl.appendChild(line("vw-cb-note", note.T ? "Comment " : "Note ", who + (note.t || "")));
         });
       }
+      if (cell && (cell.t === "n" || (!isNaN(Number(cell.v)) && cell.v !== "" && cell.v !== null))) {
+        var cIdx = first.c;
+        var sum = 0, count = 0, min = Infinity, max = -Infinity;
+        var allRows = sheet.rows || [];
+        for (var ri = 0; ri < allRows.length; ri++) {
+          var rVal = allRows[ri];
+          var cItem = sheet.cell(rVal, cIdx);
+          if (cItem && cItem.v !== undefined && cItem.v !== "" && cItem.v !== null && !isNaN(Number(cItem.v))) {
+            var num = Number(cItem.v);
+            sum += num;
+            count++;
+            if (num < min) min = num;
+            if (num > max) max = num;
+          }
+        }
+        if (count > 1) {
+          function fmtStat(n) {
+            if (!isFinite(n)) return "0";
+            return Math.abs(n) >= 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : (Math.round(n * 100) / 100);
+          }
+          var avg = sum / count;
+          var statsDiv = document.createElement("div");
+          statsDiv.className = "vw-cb-stats";
+          statsDiv.innerHTML = "<span class='vw-stat-item'><b>Col " + columnName(cIdx) + " Stats:</b></span>" +
+            "<span class='vw-stat-item'><b>SUM:</b> " + fmtStat(sum) + "</span>" +
+            "<span class='vw-stat-item'><b>AVG:</b> " + fmtStat(avg) + "</span>" +
+            "<span class='vw-stat-item'><b>COUNT:</b> " + count + "</span>" +
+            "<span class='vw-stat-item'><b>MIN:</b> " + fmtStat(min) + "</span>" +
+            "<span class='vw-stat-item'><b>MAX:</b> " + fmtStat(max) + "</span>";
+          moreEl.appendChild(statsDiv);
+        }
+      }
+      bar.hidden = false;
+      bottomRoom();
+    }
+
+    function showColumnStats(colIdx, colName) {
+      var sheet = current;
+      var sum = 0, count = 0, numCount = 0, min = Infinity, max = -Infinity;
+      var allRows = sheet.rows || [];
+      for (var ri = 0; ri < allRows.length; ri++) {
+        var rVal = allRows[ri];
+        var cItem = sheet.cell(rVal, colIdx);
+        if (cItem && cItem.v !== undefined && cItem.v !== "" && cItem.v !== null) {
+          count++;
+          if (!isNaN(Number(cItem.v))) {
+            var num = Number(cItem.v);
+            sum += num;
+            numCount++;
+            if (num < min) min = num;
+            if (num > max) max = num;
+          }
+        }
+      }
+      addressEl.textContent = "Col " + colName;
+      valueEl.classList.remove("vw-cb-none");
+      valueEl.textContent = count + " populated cells (" + numCount + " numeric)";
+      moreEl.textContent = "";
+      if (numCount > 0) {
+        function fmtStat2(n) {
+          if (!isFinite(n)) return "0";
+          return Math.abs(n) >= 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : (Math.round(n * 100) / 100);
+        }
+        var avg = sum / numCount;
+        var statsDiv = document.createElement("div");
+        statsDiv.className = "vw-cb-stats";
+        statsDiv.innerHTML = "<span class='vw-stat-item'><b>Column " + colName + " Quick Stats:</b></span>" +
+          "<span class='vw-stat-item'><b>SUM:</b> " + fmtStat2(sum) + "</span>" +
+          "<span class='vw-stat-item'><b>AVG:</b> " + fmtStat2(avg) + "</span>" +
+          "<span class='vw-stat-item'><b>COUNT:</b> " + numCount + "</span>" +
+          "<span class='vw-stat-item'><b>MIN:</b> " + fmtStat2(min) + "</span>" +
+          "<span class='vw-stat-item'><b>MAX:</b> " + fmtStat2(max) + "</span>";
+        moreEl.appendChild(statsDiv);
+      }
       bar.hidden = false;
       bottomRoom();
     }
@@ -1481,6 +1555,17 @@ vwFetchDoc("buffer")
       if (link) e.preventDefault();
       // The second tap of a double tap, which zoomed: see putBack
       if (Date.now() - zoomedAt < DOUBLE_TAP_GAP_MS) return;
+
+      var thCol = e.target.closest && e.target.closest("th.vw-ch");
+      if (thCol && current) {
+        var colName = thCol.getAttribute("data-n");
+        if (colName) {
+          var colIdx = XLSX.utils.decode_col(colName);
+          showColumnStats(colIdx, colName);
+          return;
+        }
+      }
+
       var at = cellOf(e.target);
       if (!at) return;
       if (selected && selected.r === at.r && selected.c === at.c) return;

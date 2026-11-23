@@ -608,3 +608,46 @@ window.onerror = function (message) {
   if (/ResizeObserver loop/.test(String(message))) return;
   vwError("Something went wrong while rendering", String(message));
 };
+
+window.toggleBionicReading = function (enable) {
+  if (!enable) {
+    var bionics = document.querySelectorAll(".vw-bionic-word");
+    for (var i = 0; i < bionics.length; i++) {
+      bionics[i].replaceWith(document.createTextNode(bionics[i].textContent));
+    }
+    document.body.classList.remove("vw-bionic-active");
+    return;
+  }
+  document.body.classList.add("vw-bionic-active");
+  function bionicNode(node) {
+    if (node.nodeType === 3) {
+      var text = node.nodeValue;
+      if (!text || text.trim().length === 0) return;
+      var span = document.createElement("span");
+      span.className = "vw-bionic-word";
+      var words = text.split(/(\s+)/);
+      for (var w = 0; w < words.length; w++) {
+        var word = words[w];
+        if (!word || /^\s+$/.test(word)) {
+          span.appendChild(document.createTextNode(word));
+        } else {
+          var len = word.length;
+          var mid = len <= 3 ? 1 : (len <= 6 ? 2 : Math.ceil(len * 0.45));
+          var b = document.createElement("b");
+          b.style.fontWeight = "700";
+          b.textContent = word.slice(0, mid);
+          span.appendChild(b);
+          span.appendChild(document.createTextNode(word.slice(mid)));
+        }
+      }
+      node.replaceWith(span);
+    } else if (node.nodeType === 1 && !["SCRIPT", "STYLE", "BUTTON", "SVG", "INPUT", "TEXTAREA"].includes(node.tagName) && !node.classList.contains("vw-bionic-word")) {
+      var children = Array.from(node.childNodes);
+      for (var c = 0; c < children.length; c++) {
+        bionicNode(children[c]);
+      }
+    }
+  }
+  var container = document.getElementById("result") || document.getElementById("pages") || document.body;
+  bionicNode(container);
+};

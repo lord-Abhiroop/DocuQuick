@@ -60,6 +60,26 @@
                 app:tint="?attr/colorOnSurface" />
 
             <ImageButton
+                android:id="@+id/btnSplitScreen"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="2dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_split_screen"
+                android:contentDescription="Split Screen Compare"
+                app:tint="?attr/colorOnSurface" />
+
+            <ImageButton
+                android:id="@+id/btnDocTools"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:padding="2dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_tune"
+                android:contentDescription="Document Tools"
+                app:tint="?attr/colorOnSurface" />
+
+            <ImageButton
                 android:id="@+id/btnReadAloud"
                 android:layout_width="34dp"
                 android:layout_height="34dp"
@@ -77,16 +97,6 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@drawable/ic_print"
                 android:contentDescription="Print or Save as PDF"
-                app:tint="?attr/colorOnSurface" />
-
-            <ImageButton
-                android:id="@+id/btnSplitScreen"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:padding="2dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_split_screen"
-                android:contentDescription="Split Screen Compare"
                 app:tint="?attr/colorOnSurface" />
 
             <ImageButton
@@ -461,6 +471,15 @@
                 android:text="Compare Document" />
 
             <ImageButton
+                android:id="@+id/btnSplitSyncScroll"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_link"
+                android:contentDescription="Synchronize Scroll"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+            <ImageButton
                 android:id="@+id/btnSplitSwap"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
@@ -612,5 +631,149 @@
         </FrameLayout>
 
     </LinearLayout>
+
+    <!-- Privacy Peep Shield Overlay -->
+    <FrameLayout
+        android:id="@+id/peepShieldContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="?attr/actionBarSize"
+        android:visibility="gone">
+
+        <com.docuquick.app.ui.PrivacyPeepShieldView
+            android:id="@+id/privacyPeepShield"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Floating Peep Controls -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="16dp"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="6dp"
+            app:cardBackgroundColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp">
+
+                <TextView
+                    android:id="@+id/btnPeepShrink"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:gravity="center"
+                    android:text="−"
+                    android:textSize="18sp"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:background="?attr/selectableItemBackgroundBorderless" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Slit"
+                    android:textSize="11sp"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp" />
+
+                <TextView
+                    android:id="@+id/btnPeepExpand"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:gravity="center"
+                    android:text="+"
+                    android:textSize="18sp"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:background="?attr/selectableItemBackgroundBorderless" />
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="18dp"
+                    android:background="?attr/colorOutline"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp" />
+
+                <ImageButton
+                    android:id="@+id/btnPeepClose"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_close"
+                    app:tint="?attr/colorOnSurfaceVariant"
+                    android:contentDescription="Close Peep Shield" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+    </FrameLayout>
+
+    <!-- Auto-Scroll Floating Control Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/autoScrollCard"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:visibility="gone"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="8dp"
+        app:cardBackgroundColor="?attr/colorSurfaceVariant">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp">
+
+            <ImageButton
+                android:id="@+id/btnAutoScrollPlayPause"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_pause"
+                android:contentDescription="Play/Pause"
+                app:tint="?attr/colorPrimary" />
+
+            <TextView
+                android:id="@+id/txtAutoScrollSpeed"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:text="1.0x"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="20dp"
+                android:background="?attr/colorOutline"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="6dp" />
+
+            <ImageButton
+                android:id="@+id/btnAutoScrollClose"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_close"
+                android:contentDescription="Stop Auto Scroll"
+                app:tint="?attr/colorOnSurfaceVariant" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

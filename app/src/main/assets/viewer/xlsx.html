@@ -259,6 +259,28 @@
   #cellbar button.vw-done .vw-icon-copy { display: none; }
   .vw-copy { position: fixed; top: 0; left: -9999px; opacity: 0; }
 
+  .vw-cb-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--vw-head-ground);
+    border: 1px solid var(--vw-head-line);
+    border-radius: 8px;
+    font-size: 0.85em;
+    color: var(--vw-ink);
+  }
+  .vw-stat-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .vw-stat-item b {
+    color: var(--vw-accent, #0088cc);
+  }
+
   /*
    * A spreadsheet has no paper to be faithful to, unlike a Word page, so the whole thing goes dark
    * rather than just the surround, in the app's night palette. The gridlines are about 2:1 on the

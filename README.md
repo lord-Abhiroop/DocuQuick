@@ -46,7 +46,17 @@
   - Seamlessly handles *"Open with..."* and *"Share to..."* from WhatsApp, Telegram, Gmail, Chrome, and Android Files.
 - **In-App Split-Screen Document Compare**:
   - Compare any two documents side-by-side or top/bottom simultaneously (PDF vs PDF, Word vs PDF, Excel vs Word, etc.).
-  - 1-tap quick selection from recents or browse files, with live swap (`⇅`) and independent zoom/scrolling.
+  - 1-tap quick selection from recents or browse files, with live swap (`⇅`), independent zoom/scrolling, and **Synchronized Dual-Scroll (`🔗`)** to scroll both documents in lockstep.
+- **Spreadsheet Quick-Stats Bar (`SUM`, `AVG`, `COUNT`, `MIN`, `MAX`)**:
+  - Tap any spreadsheet column header or numeric cell to instantly inspect statistical aggregations (Sum, Average, Min, Max, Count) without full editor bloatware.
+- **Bionic Speed Reading Mode**:
+  - 1-tap toggle that highlights fixation points (bolding initial syllables) across all documents for 2× to 3× faster reading with reduced eye fatigue.
+- **Peep Shield (Anti-Shoulder Surfing Privacy Mask)**:
+  - Draggable reading slit overlay that blacks out surrounding screen areas, preventing prying eyes from reading confidential documents in public transport or offices.
+- **Visual Snippet / Quote Card Generator**:
+  - 1-tap excerpt card maker that renders highlighted quotes into beautiful cards with document citations, ready to share directly to WhatsApp, Telegram, or social media.
+- **Hands-Free Auto-Scroll**:
+  - Smooth, variable-speed auto-scrolling (`0.5x` to `3.0x`) with tap-to-pause for studying, cooking recipes, or hands-free reading.
 - **Reading Position Memory (Auto-Resume)**:
   - Automatically remembers and restores your exact reading page (PDF) and scroll position (Word, Markdown, EPUB, Code, Text) across app launches.
 - **"Go to Page / Slide" Jump Dialog**:

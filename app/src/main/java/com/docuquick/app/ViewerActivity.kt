@@ -3,7 +3,9 @@ package com.docuquick.app
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
@@ -112,6 +114,38 @@ class ViewerActivity : AppCompatActivity() {
     private var secondaryPdfFileDescriptor: ParcelFileDescriptor? = null
     private var secondaryTempPdfFile: File? = null
 
+    // Split Sync Scroll State
+    private var isSplitSyncScrollEnabled = false
+    private var isSyncingScroll = false
+
+    // Bionic Speed Reading State
+    private var isBionicReadingEnabled = false
+
+    // Peep Shield Privacy State
+    private var isPeepShieldActive = false
+
+    // Auto-Scroll State
+    private var isAutoScrolling = false
+    private var isAutoScrollPaused = false
+    private var autoScrollSpeed = 1.0f
+    private val autoScrollHandler = Handler(Looper.getMainLooper())
+    private val autoScrollRunnable = object : Runnable {
+        override fun run() {
+            if (!isAutoScrolling) return
+            if (!isAutoScrollPaused) {
+                val dy = (autoScrollSpeed * 2.5f).toInt().coerceAtLeast(1)
+                if (binding.pdfRecyclerView.visibility == View.VISIBLE) {
+                    binding.pdfRecyclerView.scrollBy(0, dy)
+                } else if (binding.epubWebView.visibility == View.VISIBLE) {
+                    binding.epubWebView.scrollBy(0, dy)
+                } else if (binding.textScrollView.visibility == View.VISIBLE) {
+                    binding.textScrollView.scrollBy(0, dy)
+                }
+            }
+            autoScrollHandler.postDelayed(this, 16)
+        }
+    }
+
     private val openSecondaryDocLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -153,6 +187,7 @@ class ViewerActivity : AppCompatActivity() {
         setupSearchPanel()
         setupActionButtons()
         setupPinchToZoom()
+        setupSyncScrollListeners()
 
         documentUri?.let { uri ->
             loadDocument(uri)
@@ -191,6 +226,8 @@ class ViewerActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         statusPillHandler.removeCallbacks(hideStatusPillRunnable)
+        autoScrollHandler.removeCallbacks(autoScrollRunnable)
+        isAutoScrolling = false
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
@@ -586,6 +623,38 @@ class ViewerActivity : AppCompatActivity() {
         // Split Screen Compare
         binding.btnSplitScreen.setOnClickListener {
             toggleSplitScreen()
+        }
+
+        // Document Tools Menu
+        binding.btnDocTools.setOnClickListener {
+            showDocumentToolsSheet()
+        }
+
+        // Split Sync Scroll Toggle
+        binding.btnSplitSyncScroll.setOnClickListener {
+            toggleSplitSyncScroll()
+        }
+
+        // Peep Shield Controls
+        binding.btnPeepClose.setOnClickListener {
+            togglePeepShield()
+        }
+        binding.btnPeepExpand.setOnClickListener {
+            binding.privacyPeepShield.adjustAperture(20f)
+        }
+        binding.btnPeepShrink.setOnClickListener {
+            binding.privacyPeepShield.adjustAperture(-20f)
+        }
+
+        // Auto-Scroll Controls
+        binding.btnAutoScrollPlayPause.setOnClickListener {
+            toggleAutoScrollPlayPause()
+        }
+        binding.txtAutoScrollSpeed.setOnClickListener {
+            cycleAutoScrollSpeed()
+        }
+        binding.btnAutoScrollClose.setOnClickListener {
+            stopAutoScroll()
         }
 
         binding.btnSplitClose.setOnClickListener {
@@ -1684,7 +1753,7 @@ class ViewerActivity : AppCompatActivity() {
 
         val (pageHtml, ext) = when (type) {
             DocumentType.WORD -> "docx.html" to "docx"
-            DocumentType.EXCEL -> "sheet.html" to "xlsx"
+            DocumentType.EXCEL -> "xlsx.html" to "xlsx"
             DocumentType.PPT -> "pptx.html" to "pptx"
             DocumentType.EPUB -> "epub.html" to "epub"
             DocumentType.MARKDOWN -> "md.html" to secondaryDocName.substringAfterLast('.', "md").lowercase()
@@ -1759,5 +1828,284 @@ class ViewerActivity : AppCompatActivity() {
             secondaryTempPdfFile?.delete()
             secondaryTempPdfFile = null
         } catch (ignored: Exception) {}
+    }
+
+    private fun toggleSplitSyncScroll() {
+        isSplitSyncScrollEnabled = !isSplitSyncScrollEnabled
+        binding.btnSplitSyncScroll.alpha = if (isSplitSyncScrollEnabled) 1.0f else 0.5f
+        showStatusPill(if (isSplitSyncScrollEnabled) "🔗 Sync Scroll: ON" else "Sync Scroll: OFF", 1500L)
+    }
+
+    private fun setupSyncScrollListeners() {
+        // Primary PDF
+        binding.pdfRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (isSplitSyncScrollEnabled && !isSyncingScroll && isSplitScreenActive) {
+                    val range = (recyclerView.computeVerticalScrollRange() - recyclerView.computeVerticalScrollExtent()).coerceAtLeast(1)
+                    val ratio = recyclerView.computeVerticalScrollOffset().toFloat() / range
+                    syncToSecondaryPane(ratio)
+                }
+            }
+        })
+
+        // Secondary PDF
+        binding.splitPdfRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (isSplitSyncScrollEnabled && !isSyncingScroll && isSplitScreenActive) {
+                    val range = (recyclerView.computeVerticalScrollRange() - recyclerView.computeVerticalScrollExtent()).coerceAtLeast(1)
+                    val ratio = recyclerView.computeVerticalScrollOffset().toFloat() / range
+                    syncToPrimaryPane(ratio)
+                }
+            }
+        })
+
+        // Primary WebView
+        binding.epubWebView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            if (isSplitSyncScrollEnabled && !isSyncingScroll && isSplitScreenActive) {
+                val contentHeight = (binding.epubWebView.contentHeight * binding.epubWebView.scale).toInt()
+                val range = (contentHeight - binding.epubWebView.height).coerceAtLeast(1)
+                val ratio = scrollY.toFloat() / range
+                syncToSecondaryPane(ratio)
+            }
+        }
+
+        // Secondary WebView
+        binding.splitEpubWebView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            if (isSplitSyncScrollEnabled && !isSyncingScroll && isSplitScreenActive) {
+                val contentHeight = (binding.splitEpubWebView.contentHeight * binding.splitEpubWebView.scale).toInt()
+                val range = (contentHeight - binding.splitEpubWebView.height).coerceAtLeast(1)
+                val ratio = scrollY.toFloat() / range
+                syncToPrimaryPane(ratio)
+            }
+        }
+
+        // Primary ScrollView
+        binding.textScrollView.setOnScrollChangeListener { v: View, _, scrollY, _, _ ->
+            if (isSplitSyncScrollEnabled && !isSyncingScroll && isSplitScreenActive) {
+                val child = (v as androidx.core.widget.NestedScrollView).getChildAt(0)
+                val range = ((child?.height ?: 0) - v.height).coerceAtLeast(1)
+                val ratio = scrollY.toFloat() / range
+                syncToSecondaryPane(ratio)
+            }
+        }
+
+        // Secondary ScrollView
+        binding.splitTextScrollView.setOnScrollChangeListener { v: View, _, scrollY, _, _ ->
+            if (isSplitSyncScrollEnabled && !isSyncingScroll && isSplitScreenActive) {
+                val child = (v as androidx.core.widget.NestedScrollView).getChildAt(0)
+                val range = ((child?.height ?: 0) - binding.splitTextScrollView.height).coerceAtLeast(1)
+                val ratio = scrollY.toFloat() / range
+                syncToPrimaryPane(ratio)
+            }
+        }
+    }
+
+    private fun syncToSecondaryPane(ratio: Float) {
+        isSyncingScroll = true
+        try {
+            if (binding.splitPdfRecyclerView.visibility == View.VISIBLE) {
+                val range = (binding.splitPdfRecyclerView.computeVerticalScrollRange() - binding.splitPdfRecyclerView.computeVerticalScrollExtent()).coerceAtLeast(1)
+                val targetY = (ratio * range).toInt()
+                val diff = targetY - binding.splitPdfRecyclerView.computeVerticalScrollOffset()
+                binding.splitPdfRecyclerView.scrollBy(0, diff)
+            } else if (binding.splitEpubWebView.visibility == View.VISIBLE) {
+                val contentHeight = (binding.splitEpubWebView.contentHeight * binding.splitEpubWebView.scale).toInt()
+                val range = (contentHeight - binding.splitEpubWebView.height).coerceAtLeast(1)
+                binding.splitEpubWebView.scrollTo(0, (ratio * range).toInt())
+            } else if (binding.splitTextScrollView.visibility == View.VISIBLE) {
+                val child = binding.splitTextScrollView.getChildAt(0)
+                val range = ((child?.height ?: 0) - binding.splitTextScrollView.height).coerceAtLeast(1)
+                binding.splitTextScrollView.scrollTo(0, (ratio * range).toInt())
+            }
+        } catch (ignored: Exception) {}
+        binding.root.post { isSyncingScroll = false }
+    }
+
+    private fun syncToPrimaryPane(ratio: Float) {
+        isSyncingScroll = true
+        try {
+            if (binding.pdfRecyclerView.visibility == View.VISIBLE) {
+                val range = (binding.pdfRecyclerView.computeVerticalScrollRange() - binding.pdfRecyclerView.computeVerticalScrollExtent()).coerceAtLeast(1)
+                val targetY = (ratio * range).toInt()
+                val diff = targetY - binding.pdfRecyclerView.computeVerticalScrollOffset()
+                binding.pdfRecyclerView.scrollBy(0, diff)
+            } else if (binding.epubWebView.visibility == View.VISIBLE) {
+                val contentHeight = (binding.epubWebView.contentHeight * binding.epubWebView.scale).toInt()
+                val range = (contentHeight - binding.epubWebView.height).coerceAtLeast(1)
+                binding.epubWebView.scrollTo(0, (ratio * range).toInt())
+            } else if (binding.textScrollView.visibility == View.VISIBLE) {
+                val child = binding.textScrollView.getChildAt(0)
+                val range = ((child?.height ?: 0) - binding.textScrollView.height).coerceAtLeast(1)
+                binding.textScrollView.scrollTo(0, (ratio * range).toInt())
+            }
+        } catch (ignored: Exception) {}
+        binding.root.post { isSyncingScroll = false }
+    }
+
+    private fun toggleBionicReading() {
+        isBionicReadingEnabled = !isBionicReadingEnabled
+        val js = "window.toggleBionicReading && window.toggleBionicReading($isBionicReadingEnabled);"
+        binding.epubWebView.evaluateJavascript(js, null)
+        if (isSplitScreenActive) {
+            binding.splitEpubWebView.evaluateJavascript(js, null)
+        }
+        showStatusPill(if (isBionicReadingEnabled) "⚡ Bionic Speed Reading: ON" else "Bionic Reading: OFF", 1800L)
+    }
+
+    private fun togglePeepShield() {
+        isPeepShieldActive = !isPeepShieldActive
+        binding.peepShieldContainer.visibility = if (isPeepShieldActive) View.VISIBLE else View.GONE
+        showStatusPill(if (isPeepShieldActive) "🛡️ Peep Shield Active (Drag to Move)" else "Peep Shield Disabled", 1800L)
+    }
+
+    private fun startAutoScroll() {
+        isAutoScrolling = true
+        isAutoScrollPaused = false
+        binding.autoScrollCard.visibility = View.VISIBLE
+        binding.btnAutoScrollPlayPause.setImageResource(R.drawable.ic_pause)
+        binding.txtAutoScrollSpeed.text = "${autoScrollSpeed}x"
+        autoScrollHandler.removeCallbacks(autoScrollRunnable)
+        autoScrollHandler.post(autoScrollRunnable)
+        showStatusPill("📜 Auto-Scroll Active (Tap anywhere to pause)", 1800L)
+    }
+
+    private fun stopAutoScroll() {
+        isAutoScrolling = false
+        autoScrollHandler.removeCallbacks(autoScrollRunnable)
+        binding.autoScrollCard.visibility = View.GONE
+        showStatusPill("Auto-Scroll Stopped", 1500L)
+    }
+
+    private fun toggleAutoScrollPlayPause() {
+        isAutoScrollPaused = !isAutoScrollPaused
+        binding.btnAutoScrollPlayPause.setImageResource(if (isAutoScrollPaused) R.drawable.ic_play_arrow else R.drawable.ic_pause)
+        showStatusPill(if (isAutoScrollPaused) "Auto-Scroll Paused" else "Auto-Scroll Resumed", 1200L)
+    }
+
+    private fun cycleAutoScrollSpeed() {
+        autoScrollSpeed = when (autoScrollSpeed) {
+            0.5f -> 1.0f
+            1.0f -> 1.5f
+            1.5f -> 2.0f
+            2.0f -> 3.0f
+            else -> 0.5f
+        }
+        binding.txtAutoScrollSpeed.text = "${autoScrollSpeed}x"
+        showStatusPill("Speed: ${autoScrollSpeed}x", 1200L)
+    }
+
+    private fun showQuoteCardDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_quote_card, null)
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        dialog.setContentView(dialogView)
+
+        val editQuote = dialogView.findViewById<EditText>(R.id.editQuoteText)
+        val txtCardDocTitle = dialogView.findViewById<TextView>(R.id.txtCardDocTitle)
+        val txtCardQuote = dialogView.findViewById<TextView>(R.id.txtCardQuote)
+        val cardView = dialogView.findViewById<View>(R.id.quoteCardView)
+        val btnCopy = dialogView.findViewById<View>(R.id.btnCopyQuoteText)
+        val btnShare = dialogView.findViewById<View>(R.id.btnShareQuoteCard)
+
+        txtCardDocTitle.text = documentName
+
+        val defaultQuote = "“Life eventually gets better when obstacles become the only correct path”"
+        txtCardQuote.text = defaultQuote
+        editQuote.setText(defaultQuote.removePrefix("“").removeSuffix("”"))
+
+        editQuote.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val q = s?.toString()?.trim() ?: ""
+                txtCardQuote.text = if (q.isNotEmpty()) "“$q”" else defaultQuote
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        btnCopy.setOnClickListener {
+            val text = "${txtCardQuote.text}\n\n— Excerpt from \"$documentName\"\nShared via DocuQuick"
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("DocuQuick Snippet", text))
+            Toast.makeText(this, "Quote copied to clipboard", Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
+        }
+
+        btnShare.setOnClickListener {
+            try {
+                val w = cardView.width.coerceAtLeast(200)
+                val h = cardView.height.coerceAtLeast(150)
+                val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                cardView.draw(canvas)
+
+                val shareFile = File(cacheDir, "docuquick_card.png")
+                FileOutputStream(shareFile).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    this@ViewerActivity,
+                    "${packageName}.fileprovider",
+                    shareFile
+                )
+
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "image/png"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TEXT, "Excerpt from \"$documentName\" • Shared via DocuQuick")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(intent, "Share Snippet Card"))
+                dialog.dismiss()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Could not generate card: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun showDocumentToolsSheet() {
+        val view = layoutInflater.inflate(R.layout.dialog_document_tools, null)
+        val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        sheet.setContentView(view)
+
+        val switchBionic = view.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switchBionicReading)
+        val switchPeep = view.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switchPeepShield)
+
+        switchBionic.isChecked = isBionicReadingEnabled
+        switchPeep.isChecked = isPeepShieldActive
+
+        view.findViewById<View>(R.id.toolBionicReading).setOnClickListener {
+            toggleBionicReading()
+            switchBionic.isChecked = isBionicReadingEnabled
+        }
+
+        view.findViewById<View>(R.id.toolPeepShield).setOnClickListener {
+            togglePeepShield()
+            switchPeep.isChecked = isPeepShieldActive
+            sheet.dismiss()
+        }
+
+        view.findViewById<View>(R.id.toolAutoScroll).setOnClickListener {
+            sheet.dismiss()
+            startAutoScroll()
+        }
+
+        view.findViewById<View>(R.id.toolQuoteCard).setOnClickListener {
+            sheet.dismiss()
+            showQuoteCardDialog()
+        }
+
+        view.findViewById<View>(R.id.toolReadAloud).setOnClickListener {
+            sheet.dismiss()
+            toggleReadAloud()
+        }
+
+        view.findViewById<View>(R.id.toolPrint).setOnClickListener {
+            sheet.dismiss()
+            printOrSaveAsPdf()
+        }
+
+        sheet.show()
     }
 }
