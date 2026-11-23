@@ -52,6 +52,8 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.os.CancellationSignal
 import android.print.PageRange
 import android.print.PrintAttributes
@@ -98,6 +100,29 @@ class ViewerActivity : AppCompatActivity() {
     // Text-to-Speech state
     private var textToSpeech: TextToSpeech? = null
     private var isTtsSpeaking = false
+
+    // Status Pill auto-hide handler (pops for 1.8s, then smoothly disappears)
+    private val statusPillHandler = Handler(Looper.getMainLooper())
+    private val hideStatusPillRunnable = Runnable {
+        binding.statusPillCard.animate()
+            .alpha(0f)
+            .translationY(20f)
+            .setDuration(250)
+            .withEndAction {
+                binding.statusPillCard.visibility = View.GONE
+            }
+            .start()
+    }
+
+    private fun showStatusPill(text: String, durationMs: Long = 1800L) {
+        statusPillHandler.removeCallbacks(hideStatusPillRunnable)
+        binding.txtStatusPill.text = text
+        binding.statusPillCard.animate().cancel()
+        binding.statusPillCard.translationY = 0f
+        binding.statusPillCard.alpha = 1f
+        binding.statusPillCard.visibility = View.VISIBLE
+        statusPillHandler.postDelayed(hideStatusPillRunnable, durationMs)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -146,6 +171,7 @@ class ViewerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        statusPillHandler.removeCallbacks(hideStatusPillRunnable)
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
@@ -316,8 +342,7 @@ class ViewerActivity : AppCompatActivity() {
         binding.pdfRecyclerView.visibility = View.GONE
         binding.docImageView.visibility = View.GONE
         binding.epubWebView.visibility = View.VISIBLE
-        binding.statusPillCard.visibility = View.VISIBLE
-        binding.txtStatusPill.text = label
+        showStatusPill(label, 1800L)
 
         setupWebView()
 
@@ -330,15 +355,15 @@ class ViewerActivity : AppCompatActivity() {
         @JavascriptInterface
         fun onSlideVisible(current: Int, total: Int) {
             runOnUiThread {
-                binding.statusPillCard.visibility = View.VISIBLE
                 currentActivePage = current
                 totalDocumentPages = total
                 documentUri?.let { app.prefs.saveDocumentPosition(it.toString(), current) }
-                if (documentType == DocumentType.PPT) {
-                    binding.txtStatusPill.text = "Slide $current of $total"
+                val pillText = if (documentType == DocumentType.PPT) {
+                    "Slide $current of $total"
                 } else {
-                    binding.txtStatusPill.text = getString(R.string.page_counter, current, total)
+                    getString(R.string.page_counter, current, total)
                 }
+                showStatusPill(pillText, 1800L)
             }
         }
     }
@@ -534,9 +559,17 @@ class ViewerActivity : AppCompatActivity() {
             shareCurrentDocument()
         }
 
-        // File Details on Subtitle Click
+        // Subtitle click: Quick jump if multi-page, else file info
         binding.txtDocSubtitle.setOnClickListener {
+            if (totalDocumentPages > 1) {
+                showJumpToPageDialog()
+            } else {
+                showFileInfoDialog()
+            }
+        }
+        binding.txtDocSubtitle.setOnLongClickListener {
             showFileInfoDialog()
+            true
         }
     }
 
@@ -577,6 +610,8 @@ class ViewerActivity : AppCompatActivity() {
     }
 
     private fun hideAllContentViews() {
+        statusPillHandler.removeCallbacks(hideStatusPillRunnable)
+        binding.statusPillCard.visibility = View.GONE
         binding.pdfRecyclerView.visibility = View.GONE
         binding.textScrollView.visibility = View.GONE
         binding.tableHorizontalScrollView.visibility = View.GONE
@@ -676,7 +711,7 @@ class ViewerActivity : AppCompatActivity() {
                 val savedPage = documentUri?.let { app.prefs.getDocumentPosition(it.toString()) } ?: 1
                 currentActivePage = if (savedPage in 1..renderer.pageCount) savedPage else 1
 
-                binding.txtStatusPill.text = getString(R.string.page_counter, currentActivePage, renderer.pageCount)
+                showStatusPill(getString(R.string.page_counter, currentActivePage, renderer.pageCount), 1800L)
 
                 if (currentActivePage > 1) {
                     binding.pdfRecyclerView.post {
@@ -725,7 +760,7 @@ class ViewerActivity : AppCompatActivity() {
 
                         currentActivePage = activePage
                         totalDocumentPages = totalPages
-                        binding.txtStatusPill.text = getString(R.string.page_counter, activePage, totalPages)
+                        showStatusPill(getString(R.string.page_counter, activePage, totalPages), 1500L)
                         documentUri?.let { app.prefs.saveDocumentPosition(it.toString(), activePage) }
                     }
                 })
@@ -867,7 +902,7 @@ class ViewerActivity : AppCompatActivity() {
             binding.docImageView.visibility = View.VISIBLE
             bitmap?.let {
                 binding.docImageView.setImageBitmap(it)
-                binding.txtStatusPill.text = "${it.width} × ${it.height} px"
+                showStatusPill("${it.width} × ${it.height} px", 1800L)
             } ?: run {
                 Toast.makeText(this@ViewerActivity, "Unable to load image", Toast.LENGTH_SHORT).show()
             }
@@ -888,7 +923,7 @@ class ViewerActivity : AppCompatActivity() {
 
         val words = ssb.split(Regex("\\s+")).count { it.isNotBlank() }
         val readTimeMinutes = (words / 200).coerceAtLeast(1)
-        binding.txtStatusPill.text = getString(R.string.word_count, words, "$readTimeMinutes min")
+        showStatusPill(getString(R.string.word_count, words, "$readTimeMinutes min"), 1800L)
 
         val savedY = documentUri?.let { app.prefs.getDocumentScrollY(it.toString()) } ?: 0
         if (savedY > 0) {
@@ -1193,8 +1228,9 @@ class ViewerActivity : AppCompatActivity() {
                     if (binding.pdfRecyclerView.visibility == View.VISIBLE) {
                         (binding.pdfRecyclerView.layoutManager as? LinearLayoutManager)
                             ?.scrollToPositionWithOffset(pageNum - 1, 0)
-                        binding.txtStatusPill.text = getString(R.string.page_counter, pageNum, totalDocumentPages)
+                        showStatusPill(getString(R.string.page_counter, pageNum, totalDocumentPages), 1800L)
                     } else if (binding.epubWebView.visibility == View.VISIBLE) {
+                        showStatusPill(getString(R.string.page_counter, pageNum, totalDocumentPages), 1800L)
                         val jumpJs = """
                             (function() {
                                 var slides = document.querySelectorAll('#result .slide, #pages .pg');
