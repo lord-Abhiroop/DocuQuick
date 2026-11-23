@@ -53,8 +53,8 @@
   - 1-tap toggle that highlights fixation points (bolding initial syllables) across all documents for 2× to 3× faster reading with reduced eye fatigue.
 - **Peep Shield (Anti-Shoulder Surfing Privacy Mask)**:
   - Draggable reading slit overlay that blacks out surrounding screen areas, preventing prying eyes from reading confidential documents in public transport or offices.
-- **Visual Snippet / Quote Card Generator**:
-  - 1-tap excerpt card maker that renders highlighted quotes into beautiful cards with document citations, ready to share directly to WhatsApp, Telegram, or social media.
+- **Interactive Visual Snippet & Crop Card Maker**:
+  - Drag and cut out any custom rectangular region directly from the document (diagrams, tables, formulas, charts, or text) and generate a high-definition, beautifully framed snippet card with document citations, ready to share directly or save to Downloads.
 - **Hands-Free Auto-Scroll**:
   - Smooth, variable-speed auto-scrolling (`0.5x` to `3.0x`) with tap-to-pause for studying, cooking recipes, or hands-free reading.
 - **Reading Position Memory (Auto-Resume)**:

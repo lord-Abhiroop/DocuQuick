@@ -776,4 +776,68 @@
 
     </com.google.android.material.card.MaterialCardView>
 
+    <!-- Visual Snippet Crop Overlay -->
+    <FrameLayout
+        android:id="@+id/snippetCropContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="?attr/actionBarSize"
+        android:visibility="gone">
+
+        <com.docuquick.app.ui.SnippetCropOverlayView
+            android:id="@+id/snippetCropOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Floating Snip Controls (Bottom) -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="28dp"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="8dp"
+            app:cardBackgroundColor="?attr/colorSurfaceVariant">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp">
+
+                <ImageButton
+                    android:id="@+id/btnCancelSnippetCrop"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_close"
+                    android:contentDescription="Cancel Snip"
+                    app:tint="?attr/colorOnSurfaceVariant" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="12dp"
+                    android:text="Drag box to snip"
+                    android:textSize="12sp"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnConfirmSnippetCrop"
+                    style="@style/Widget.Material3.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:text="Cut Snippet Card"
+                    android:textSize="12sp"
+                    app:icon="@drawable/ic_crop" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+    </FrameLayout>
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

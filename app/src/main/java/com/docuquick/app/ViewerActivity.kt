@@ -24,9 +24,11 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.ImageView
 import android.widget.TableRow
 import android.widget.TextView
 import android.widget.Toast
+import com.docuquick.app.util.SnippetCardGenerator
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -655,6 +657,14 @@ class ViewerActivity : AppCompatActivity() {
         }
         binding.btnAutoScrollClose.setOnClickListener {
             stopAutoScroll()
+        }
+
+        // Visual Snippet Crop Controls
+        binding.btnCancelSnippetCrop.setOnClickListener {
+            cancelVisualSnippetCrop()
+        }
+        binding.btnConfirmSnippetCrop.setOnClickListener {
+            captureVisualSnippetCard()
         }
 
         binding.btnSplitClose.setOnClickListener {
@@ -1994,52 +2004,69 @@ class ViewerActivity : AppCompatActivity() {
         showStatusPill("Speed: ${autoScrollSpeed}x", 1200L)
     }
 
-    private fun showQuoteCardDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_quote_card, null)
+    private fun startVisualSnippetCrop() {
+        binding.snippetCropContainer.visibility = View.VISIBLE
+        binding.snippetCropOverlay.resetDefaultCrop()
+        showStatusPill("✂️ Drag selection box to snip any area", 2200L)
+    }
+
+    private fun cancelVisualSnippetCrop() {
+        binding.snippetCropContainer.visibility = View.GONE
+    }
+
+    private fun captureVisualSnippetCard() {
+        val cropRect = binding.snippetCropOverlay.getCropRectInt()
+        if (cropRect.width() < 20 || cropRect.height() < 20) {
+            Toast.makeText(this, "Select a larger area to snip", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        binding.snippetCropContainer.visibility = View.GONE
+
+        val targetView = binding.primaryPaneContainer
+        try {
+            val fullBitmap = Bitmap.createBitmap(targetView.width, targetView.height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(fullBitmap)
+            targetView.draw(canvas)
+
+            val safeL = cropRect.left.coerceIn(0, fullBitmap.width - 1)
+            val safeT = cropRect.top.coerceIn(0, fullBitmap.height - 1)
+            val safeW = cropRect.width().coerceAtMost(fullBitmap.width - safeL)
+            val safeH = cropRect.height().coerceAtMost(fullBitmap.height - safeT)
+
+            val croppedBitmap = Bitmap.createBitmap(fullBitmap, safeL, safeT, safeW, safeH)
+            fullBitmap.recycle()
+
+            val cardBitmap = SnippetCardGenerator.generateSnippetCard(
+                this,
+                croppedBitmap,
+                documentName,
+                documentType.categoryName
+            )
+            croppedBitmap.recycle()
+
+            showSnippetCardResultDialog(cardBitmap)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Snippet capture failed: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showSnippetCardResultDialog(cardBitmap: Bitmap) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_snippet_result, null)
         val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         dialog.setContentView(dialogView)
 
-        val editQuote = dialogView.findViewById<EditText>(R.id.editQuoteText)
-        val txtCardDocTitle = dialogView.findViewById<TextView>(R.id.txtCardDocTitle)
-        val txtCardQuote = dialogView.findViewById<TextView>(R.id.txtCardQuote)
-        val cardView = dialogView.findViewById<View>(R.id.quoteCardView)
-        val btnCopy = dialogView.findViewById<View>(R.id.btnCopyQuoteText)
-        val btnShare = dialogView.findViewById<View>(R.id.btnShareQuoteCard)
+        val imgPreview = dialogView.findViewById<ImageView>(R.id.imgSnippetCardPreview)
+        val btnSave = dialogView.findViewById<View>(R.id.btnSaveSnippetCard)
+        val btnShare = dialogView.findViewById<View>(R.id.btnShareSnippetCard)
 
-        txtCardDocTitle.text = documentName
-
-        val defaultQuote = "“Life eventually gets better when obstacles become the only correct path”"
-        txtCardQuote.text = defaultQuote
-        editQuote.setText(defaultQuote.removePrefix("“").removeSuffix("”"))
-
-        editQuote.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val q = s?.toString()?.trim() ?: ""
-                txtCardQuote.text = if (q.isNotEmpty()) "“$q”" else defaultQuote
-            }
-            override fun afterTextChanged(s: Editable?) {}
-        })
-
-        btnCopy.setOnClickListener {
-            val text = "${txtCardQuote.text}\n\n— Excerpt from \"$documentName\"\nShared via DocuQuick"
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("DocuQuick Snippet", text))
-            Toast.makeText(this, "Quote copied to clipboard", Toast.LENGTH_SHORT).show()
-            dialog.dismiss()
-        }
+        imgPreview.setImageBitmap(cardBitmap)
 
         btnShare.setOnClickListener {
             try {
-                val w = cardView.width.coerceAtLeast(200)
-                val h = cardView.height.coerceAtLeast(150)
-                val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                cardView.draw(canvas)
-
-                val shareFile = File(cacheDir, "docuquick_card.png")
+                val shareFile = File(cacheDir, "docuquick_snippet_card.png")
                 FileOutputStream(shareFile).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    cardBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
                 }
 
                 val uri = androidx.core.content.FileProvider.getUriForFile(
@@ -2051,13 +2078,29 @@ class ViewerActivity : AppCompatActivity() {
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "image/png"
                     putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_TEXT, "Excerpt from \"$documentName\" • Shared via DocuQuick")
+                    putExtra(Intent.EXTRA_TEXT, "Visual snippet from \"$documentName\" • Captured via DocuQuick")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                startActivity(Intent.createChooser(intent, "Share Snippet Card"))
+                startActivity(Intent.createChooser(intent, "Share Visual Snippet Card"))
                 dialog.dismiss()
             } catch (e: Exception) {
-                Toast.makeText(this, "Could not generate card: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Share failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnSave.setOnClickListener {
+            try {
+                val downloadDir = File("/sdcard/Download")
+                if (!downloadDir.exists()) downloadDir.mkdirs()
+                val fileName = "DocuQuick_Snippet_${System.currentTimeMillis()}.png"
+                val destFile = File(downloadDir, fileName)
+                FileOutputStream(destFile).use { out ->
+                    cardBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+                Toast.makeText(this, "Saved snippet to Downloads / $fileName", Toast.LENGTH_LONG).show()
+                dialog.dismiss()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Save failed: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -2093,7 +2136,7 @@ class ViewerActivity : AppCompatActivity() {
 
         view.findViewById<View>(R.id.toolQuoteCard).setOnClickListener {
             sheet.dismiss()
-            showQuoteCardDialog()
+            startVisualSnippetCrop()
         }
 
         view.findViewById<View>(R.id.toolReadAloud).setOnClickListener {
