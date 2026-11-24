@@ -50,17 +50,24 @@ class PreferencesManager(context: Context) {
             val array = JSONArray(json)
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
+                val rawName = obj.optString("name", "Document")
+                val rawType = obj.optString("type", "")
                 val type = try {
-                    DocumentType.valueOf(obj.getString("type"))
+                    val parsed = DocumentType.valueOf(rawType)
+                    if (parsed == DocumentType.UNKNOWN) {
+                        DocumentType.fromFileNameAndMime(rawName, null)
+                    } else {
+                        parsed
+                    }
                 } catch (e: Exception) {
-                    DocumentType.UNKNOWN
+                    DocumentType.fromFileNameAndMime(rawName, null)
                 }
                 val savedTime = obj.optLong("time", 0L)
                 val finalTime = if (savedTime > 0L) savedTime else System.currentTimeMillis()
                 list.add(
                     RecentFile(
                         uriString = obj.getString("uri"),
-                        name = obj.getString("name"),
+                        name = rawName,
                         sizeBytes = obj.optLong("size", 0L),
                         type = type,
                         lastOpened = finalTime

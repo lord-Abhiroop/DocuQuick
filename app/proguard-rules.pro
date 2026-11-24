@@ -10,18 +10,25 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Keep data models and bridge
+# Keep data models, enum constants, and serialization
 -keep class com.docuquick.app.model.** { *; }
+-keepclassmembers enum com.docuquick.app.model.** {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+    public *;
+}
 -keep class com.docuquick.app.ViewerActivity$PresentationBridge { *; }
 
-# Material Components: Allow R8 to tree-shake unused widgets while preserving used components
+# Keep RecyclerView UI Adapters and ViewHolders
+-keep class com.docuquick.app.ui.RecentFilesAdapter* { *; }
+-keep class * extends androidx.recyclerview.widget.RecyclerView$ViewHolder { *; }
+
+# Keep Material Components and Scrolling Behaviors (invoked via XML reflection)
 -dontwarn com.google.android.material.**
+-keep class com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior { *; }
+-keep class com.google.android.material.appbar.HeaderScrollingViewBehavior { *; }
 -keepclassmembers class * extends android.view.View {
     public <init>(android.content.Context);
     public <init>(android.content.Context, android.util.AttributeSet);
     public <init>(android.content.Context, android.util.AttributeSet, int);
 }
-
-# Aggressive inlining and class repackaging for maximum bytecode compression
--allowaccessmodification
--repackageclasses ""
