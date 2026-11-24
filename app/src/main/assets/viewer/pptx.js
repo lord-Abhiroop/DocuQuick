@@ -413,7 +413,12 @@ var vwPoll = setInterval(function () {
 vwChecks++;
 var slides = document.querySelectorAll("#result .slide");
 if (slides.length > 0) {
-vwDisarmLinks(document.getElementById("result"));
+var root = document.getElementById("result");
+spacesThatBreak(root);
+regularWeight(root);
+bulletsHang(root);
+whatIsMissing(root);
+vwDisarmLinks(root);
 vwFitHeight();
 vwStatusDone();
 clearInterval(vwPoll);

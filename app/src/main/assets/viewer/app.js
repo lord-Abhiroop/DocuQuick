@@ -379,6 +379,7 @@ function bionicNode(node) {
 if (node.nodeType === 3) {
 var text = node.nodeValue;
 if (!text || text.trim().length === 0) return;
+text = text.replace(/\u00a0/g, " ");
 var span = document.createElement("span");
 span.className = "vw-bionic-word";
 var words = text.split(/(\s+)/);
@@ -390,7 +391,7 @@ span.appendChild(document.createTextNode(word));
 var len = word.length;
 var mid = len <= 3 ? 1 : (len <= 6 ? 2 : Math.ceil(len * 0.45));
 var b = document.createElement("b");
-b.style.fontWeight = "700";
+b.style.fontWeight = "800";
 b.textContent = word.slice(0, mid);
 span.appendChild(b);
 span.appendChild(document.createTextNode(word.slice(mid)));

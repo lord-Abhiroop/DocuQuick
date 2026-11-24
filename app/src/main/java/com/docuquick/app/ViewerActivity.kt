@@ -1953,6 +1953,10 @@ class ViewerActivity : AppCompatActivity() {
     }
 
     private fun toggleBionicReading() {
+        if (documentType == DocumentType.PDF || binding.pdfRecyclerView.visibility == View.VISIBLE) {
+            showStatusPill("ℹ️ Bionic reading is for Word, Excel, PPT & Text (PDFs are in native visual mode)", 2500L)
+            return
+        }
         isBionicReadingEnabled = !isBionicReadingEnabled
         val js = "window.toggleBionicReading && window.toggleBionicReading($isBionicReadingEnabled);"
         binding.epubWebView.evaluateJavascript(js, null)
@@ -2114,14 +2118,31 @@ class ViewerActivity : AppCompatActivity() {
 
         val switchBionic = view.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switchBionicReading)
         val switchPeep = view.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switchPeepShield)
+        val toolBionic = view.findViewById<View>(R.id.toolBionicReading)
+        val txtBionicStatus = view.findViewById<android.widget.TextView>(R.id.txtBionicStatus)
 
-        switchBionic.isChecked = isBionicReadingEnabled
-        switchPeep.isChecked = isPeepShieldActive
+        val isPdf = (documentType == DocumentType.PDF) || (binding.pdfRecyclerView.visibility == View.VISIBLE)
 
-        view.findViewById<View>(R.id.toolBionicReading).setOnClickListener {
-            toggleBionicReading()
+        if (isPdf) {
+            switchBionic.isChecked = false
+            switchBionic.isEnabled = false
+            toolBionic.alpha = 0.5f
+            txtBionicStatus?.text = "Available for Word, Excel, PPT & Text (PDF is in visual mode)"
+            toolBionic.setOnClickListener {
+                showStatusPill("ℹ️ Bionic reading is for Word, Excel, PPT & Text (PDFs are in native visual mode)", 2500L)
+            }
+        } else {
+            toolBionic.alpha = 1.0f
+            switchBionic.isEnabled = true
             switchBionic.isChecked = isBionicReadingEnabled
+            txtBionicStatus?.text = "Fast eye fixation on key syllables"
+            toolBionic.setOnClickListener {
+                toggleBionicReading()
+                switchBionic.isChecked = isBionicReadingEnabled
+            }
         }
+
+        switchPeep.isChecked = isPeepShieldActive
 
         view.findViewById<View>(R.id.toolPeepShield).setOnClickListener {
             togglePeepShield()
